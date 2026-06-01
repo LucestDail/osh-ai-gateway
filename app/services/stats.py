@@ -76,17 +76,17 @@ def summary(conn: sqlite3.Connection) -> dict[str, Any]:
 
 
 def histogram_24h(conn: sqlite3.Connection) -> list[dict[str, Any]]:
-    now = _kst_now().replace(minute=0, second=0, microsecond=0)
+    anchor = _kst_now().replace(minute=0, second=0, microsecond=0)
     buckets = [
-        {"label": (now - timedelta(hours=23 - i)).strftime("%H시"), "count": 0}
+        {"label": (anchor - timedelta(hours=23 - i)).strftime("%H시"), "count": 0}
         for i in range(24)
     ]
-    cutoff = now - timedelta(hours=24)
+    cutoff = anchor - timedelta(hours=23)
     for row in _rows(conn, "SELECT ts FROM usage_log"):
         dt = _parse_ts(row["ts"]).astimezone(KST)
         if dt < cutoff:
             continue
-        idx = 23 - int((now - dt).total_seconds() // 3600)
+        idx = int((dt - cutoff).total_seconds() // 3600)
         if 0 <= idx < 24:
             buckets[idx]["count"] += 1
     return buckets
