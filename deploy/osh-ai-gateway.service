@@ -10,7 +10,7 @@ Group=seunghyun
 WorkingDirectory=/home/seunghyun/osh-ai-gateway
 EnvironmentFile=/home/seunghyun/osh-ai-gateway/.env
 Environment=PYTHONUNBUFFERED=1
-ExecStart=/home/seunghyun/osh-ai-gateway/.venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 8780
+ExecStart=/home/seunghyun/osh-ai-gateway/.venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8780
 Restart=on-failure
 RestartSec=5
 
