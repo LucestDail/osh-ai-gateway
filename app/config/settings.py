@@ -29,7 +29,10 @@ class Settings(BaseSettings):
     proxy_timeout_seconds: float = 120.0
     proxy_stream_timeout_seconds: float = 600.0
 
-    # Optional usage log file (JSON lines). Empty = stdout only.
+    # SQLite traffic store for /stats dashboard.
+    usage_db_path: str = "data/usage.db"
+
+    # Optional JSON lines mirror. Empty = disabled.
     usage_log_path: str = ""
 
 

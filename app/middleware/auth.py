@@ -9,7 +9,8 @@ from starlette.responses import Response
 
 from app.config.settings import settings
 
-_PUBLIC_PATHS = {"/", "/health", "/docs", "/openapi.json", "/redoc"}
+_PUBLIC_PATHS = {"/", "/health", "/stats", "/api/stats", "/docs", "/openapi.json", "/redoc"}
+_PUBLIC_PREFIXES = ("/static/",)
 
 
 class InternalAuthMiddleware(BaseHTTPMiddleware):
@@ -21,6 +22,9 @@ class InternalAuthMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         if request.url.path in _PUBLIC_PATHS:
+            return await call_next(request)
+
+        if any(request.url.path.startswith(p) for p in _PUBLIC_PREFIXES):
             return await call_next(request)
 
         provided = request.headers.get("x-gateway-token", "")

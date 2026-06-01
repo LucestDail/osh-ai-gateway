@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from app.config.settings import settings
+from app.services import usage_store
 
 logger = logging.getLogger("osh_ai_gateway.usage")
 
@@ -57,6 +58,11 @@ def log_request(
 
     line = json.dumps(record, ensure_ascii=False)
     logger.info(line)
+
+    try:
+        usage_store.insert_record(record)
+    except Exception:
+        logger.exception("failed to persist usage record")
 
     log_path = settings.usage_log_path.strip()
     if log_path:
