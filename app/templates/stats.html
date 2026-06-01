@@ -72,7 +72,68 @@
                 <div class="kpi-label">평균 지연</div>
                 <div class="kpi-value">{{ summary.avg_latency_ms }}<span style="font-size:0.9rem">ms</span></div>
             </div>
+            <div class="kpi">
+                <div class="kpi-label">누적 비용</div>
+                <div class="kpi-value">₩{{ '{:,}'.format(summary.cost_krw) }}</div>
+                <div class="kpi-sub">${{ '%.4f' | format(summary.cost_usd) }}</div>
+            </div>
         </div>
+    </section>
+
+    <section class="card">
+        <header class="card-head">
+            <h2 class="heading-2">비용 추정</h2>
+            <span class="path-tag">
+                in ${{ cost.params.price_in_per_m_usd }}/M ·
+                out ${{ cost.params.price_out_per_m_usd }}/M ·
+                ₩{{ cost.params.usd_krw|int }}/USD
+            </span>
+        </header>
+        <p class="muted" style="margin-top:0">{{ cost.note }}</p>
+        <div class="kpi-grid">
+            <div class="kpi">
+                <div class="kpi-label">입력 토큰</div>
+                <div class="kpi-value">{{ '{:,}'.format(cost.total_prompt_tokens) }}</div>
+            </div>
+            <div class="kpi">
+                <div class="kpi-label">출력 토큰</div>
+                <div class="kpi-value">{{ '{:,}'.format(cost.total_output_tokens) }}</div>
+            </div>
+            <div class="kpi">
+                <div class="kpi-label">누적 (USD)</div>
+                <div class="kpi-value">${{ '%.4f' | format(cost.total_usd) }}</div>
+            </div>
+            <div class="kpi">
+                <div class="kpi-label">누적 (KRW)</div>
+                <div class="kpi-value">₩{{ '{:,}'.format(cost.total_krw) }}</div>
+            </div>
+            <div class="kpi">
+                <div class="kpi-label">월 예상 (USD)</div>
+                <div class="kpi-value">${{ '%.4f' | format(cost.monthly_est_usd) }}</div>
+                <div class="kpi-sub">최근 7일 일평균 × 30</div>
+            </div>
+            <div class="kpi">
+                <div class="kpi-label">월 예상 (KRW)</div>
+                <div class="kpi-value">₩{{ '{:,}'.format(cost.monthly_est_krw) }}</div>
+            </div>
+        </div>
+        <table class="data" style="margin-top:1rem">
+            <thead>
+                <tr><th>날짜</th><th>요청</th><th>in tok</th><th>out tok</th><th>USD</th><th>KRW</th></tr>
+            </thead>
+            <tbody>
+                {% for r in cost.per_day %}
+                <tr>
+                    <td>{{ r.label }}</td>
+                    <td>{{ r.requests }}</td>
+                    <td>{{ '{:,}'.format(r.prompt_tokens) }}</td>
+                    <td>{{ '{:,}'.format(r.output_tokens) }}</td>
+                    <td>${{ '%.5f' | format(r.usd) }}</td>
+                    <td>₩{{ '{:,}'.format(r.krw) }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
     </section>
 
     <section class="card">
@@ -130,6 +191,8 @@
                     <th>요청</th>
                     <th>오류</th>
                     <th>토큰</th>
+                    <th>USD</th>
+                    <th>KRW</th>
                     <th>평균 ms</th>
                 </tr>
             </thead>
@@ -140,6 +203,8 @@
                     <td>{{ row.requests }}</td>
                     <td class="{{ 'status-err' if row.errors else '' }}">{{ row.errors }}</td>
                     <td>{{ row.tokens }}</td>
+                    <td>${{ '%.5f' | format(row.cost_usd) }}</td>
+                    <td>₩{{ '{:,}'.format(row.cost_krw) }}</td>
                     <td>{{ row.avg_ms }}</td>
                 </tr>
                 {% endfor %}

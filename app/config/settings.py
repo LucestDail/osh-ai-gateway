@@ -35,5 +35,10 @@ class Settings(BaseSettings):
     # Optional JSON lines mirror. Empty = disabled.
     usage_log_path: str = ""
 
+    # Cost estimate (usageMetadata actual tokens × unit price)
+    gemini_price_per_m_in_usd: float = 0.10
+    gemini_price_per_m_out_usd: float = 0.40
+    usd_krw_rate: float = 1380.0
+
 
 settings = Settings()
