@@ -1,0 +1,859 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Homelab Gateway — 192.168.11.25</title>
+    <style>
+:root {
+    --primary: #6B5BD0;
+    --ink: #1F1F1F;
+    --charcoal: #37352F;
+    --slate: #5C5A54;
+    --steel: #908E88;
+    --canvas: #FFFFFF;
+    --surface: #F7F6F3;
+    --hairline: #E9E9E7;
+    --hairline-soft: #F0EFEC;
+    --tint-mint: #DAF1E5;
+    --tint-lavender: #E8E0F4;
+    --tint-rose: #F5DDDD;
+    --tint-yellow: #FFF7C2;
+    --brand-green: #1F7A4D;
+    --error: #B84444;
+    --link-blue: #2783D8;
+    --rounded-md: 8px;
+    --rounded-lg: 12px;
+    --rounded-full: 9999px;
+    --elev-1: rgba(15, 15, 15, 0.04) 0px 1px 2px 0px;
+    --elev-2: rgba(15, 15, 15, 0.08) 0px 4px 12px 0px;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+    font-family: 'Inter', -apple-system, system-ui, sans-serif;
+    color: var(--charcoal);
+    background: var(--canvas);
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+}
+
+a { color: inherit; text-decoration: none; }
+
+.topnav {
+    background: var(--canvas);
+    border-bottom: 1px solid var(--hairline);
+    height: 64px;
+    position: sticky;
+    top: 0;
+    z-index: 50;
+}
+.nav-inner {
+    max-width: 960px;
+    margin: 0 auto;
+    height: 100%;
+    padding: 0 32px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+.brand-logo {
+    width: 28px;
+    height: 28px;
+    border-radius: var(--rounded-md);
+    background: var(--ink);
+    color: #fff;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 15px;
+}
+.brand-name { font-weight: 600; font-size: 16px; color: var(--ink); }
+.brand-sub { font-size: 14px; color: var(--steel); }
+.spacer { flex: 1; }
+.chip {
+    font-size: 12px;
+    color: var(--steel);
+    background: var(--surface);
+    border: 1px solid var(--hairline);
+    border-radius: var(--rounded-full);
+    padding: 4px 10px;
+}
+
+.container {
+    max-width: 960px;
+    margin: 40px auto 64px;
+    padding: 0 32px;
+    display: flex;
+    flex-direction: column;
+    gap: 28px;
+}
+
+.hero { text-align: center; padding: 24px 0 8px; }
+.display {
+    font-size: 48px;
+    font-weight: 600;
+    letter-spacing: -0.5px;
+    color: var(--ink);
+    margin-bottom: 12px;
+}
+.subtitle {
+    font-size: 17px;
+    color: var(--slate);
+    max-width: 560px;
+    margin: 0 auto;
+}
+
+.card {
+    background: var(--canvas);
+    border: 1px solid var(--hairline);
+    border-radius: var(--rounded-lg);
+    padding: 28px;
+    box-shadow: var(--elev-1);
+}
+.card-head {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 16px;
+}
+.heading-2 {
+    font-size: 22px;
+    font-weight: 600;
+    color: var(--ink);
+}
+.muted { color: var(--steel); font-size: 14px; }
+.muted-small { color: var(--steel); font-size: 12px; }
+
+.status-strip {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+}
+.status-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    font-weight: 500;
+    padding: 6px 12px;
+    border-radius: var(--rounded-full);
+    border: 1px solid var(--hairline);
+    background: var(--surface);
+}
+.dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--steel);
+    flex-shrink: 0;
+}
+.dot-ok { background: var(--brand-green); }
+.dot-warn { background: #C56A1F; }
+.dot-err { background: var(--error); }
+.dot-pending { background: var(--steel); animation: pulse 1.2s ease infinite; }
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.35; }
+}
+
+.service-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 16px;
+}
+
+.service-card {
+    border: 1px solid var(--hairline);
+    border-radius: var(--rounded-lg);
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    min-height: 220px;
+    transition: box-shadow 0.15s ease, border-color 0.15s ease;
+    background: var(--canvas);
+}
+.service-card:hover {
+    border-color: #d4d4d1;
+    box-shadow: var(--elev-2);
+}
+.service-card-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 8px;
+}
+.service-name {
+    font-size: 17px;
+    font-weight: 600;
+    color: var(--ink);
+}
+.service-desc {
+    font-size: 14px;
+    color: var(--slate);
+    flex: 1;
+    line-height: 1.5;
+}
+.service-path {
+    font-family: 'SF Mono', Menlo, Consolas, monospace;
+    font-size: 12px;
+    color: var(--steel);
+    background: var(--surface);
+    border: 1px solid var(--hairline-soft);
+    border-radius: 6px;
+    padding: 4px 8px;
+    display: inline-block;
+}
+.service-links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: auto;
+    padding-top: 8px;
+    align-items: center;
+}
+.btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 13px;
+    font-weight: 500;
+    padding: 8px 14px;
+    border-radius: var(--rounded-md);
+    border: none;
+    cursor: pointer;
+    font-family: inherit;
+}
+.btn-primary {
+    background: var(--primary);
+    color: #fff;
+}
+.btn-primary:hover { filter: brightness(1.05); }
+.btn-secondary {
+    background: transparent;
+    color: var(--charcoal);
+    border: 1px solid var(--hairline);
+}
+.btn-secondary:hover { background: var(--surface); }
+
+.badge-tag {
+    display: inline-flex;
+    align-items: center;
+    align-self: center;
+    background: var(--tint-lavender);
+    color: #4A3E8E;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 6px 10px;
+    border-radius: 6px;
+    line-height: 1.3;
+    min-height: 34px;
+}
+
+.info-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    font-size: 14px;
+    border: 1px solid var(--hairline);
+    border-radius: var(--rounded-md);
+    overflow: hidden;
+}
+.info-table th,
+.info-table td {
+    padding: 12px 16px;
+    text-align: left;
+    border-bottom: 1px solid var(--hairline-soft);
+}
+.info-table th {
+    background: var(--surface);
+    font-weight: 500;
+    color: var(--charcoal);
+    width: 140px;
+}
+.info-table tr:last-child td,
+.info-table tr:last-child th { border-bottom: none; }
+
+.footer {
+    border-top: 1px solid var(--hairline);
+    padding: 24px 32px;
+    text-align: center;
+    color: var(--steel);
+    font-size: 13px;
+}
+
+.status-badge.status-ok { background: var(--tint-mint); color: var(--brand-green); }
+.status-badge.status-warn { background: var(--tint-yellow); color: #8E6B0F; }
+.status-badge.status-err { background: var(--tint-rose); color: var(--error); }
+.status-badge.status-pending { background: var(--surface); color: var(--steel); }
+.muted-small { color: var(--steel); font-size: 12px; line-height: 1.6; }
+
+.heading-3 {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--ink);
+    margin-bottom: 10px;
+}
+.mt-md { margin-top: 16px; }
+
+.kpi-row {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+}
+@media (max-width: 720px) {
+    .kpi-row { grid-template-columns: 1fr; }
+}
+.kpi {
+    background: var(--surface);
+    border: 1px solid var(--hairline);
+    border-radius: var(--rounded-md);
+    padding: 14px 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+.kpi-label {
+    font-size: 12px;
+    color: var(--steel);
+}
+.kpi-num {
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--charcoal);
+    font-variant-numeric: tabular-nums;
+}
+
+.chart-grid-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+}
+@media (max-width: 900px) {
+    .chart-grid-2 { grid-template-columns: 1fr; }
+}
+.bar-chart {
+    width: 100%;
+    height: auto;
+    max-height: 180px;
+}
+.bar-rect {
+    fill: var(--primary);
+    opacity: 0.85;
+}
+.bar-x {
+    font-size: 9px;
+    fill: var(--steel);
+    font-family: ui-sans-serif, system-ui, sans-serif;
+}
+.bar-v {
+    font-size: 9px;
+    fill: var(--charcoal);
+    font-weight: 600;
+    font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+.card-head .spacer { flex: 1; min-width: 8px; }
+
+@media (max-width: 768px) {
+    .display { font-size: 32px; }
+    .container { padding: 0 16px; margin-top: 24px; }
+    .nav-inner { padding: 0 16px; }
+    .service-grid { grid-template-columns: 1fr; }
+}
+
+    </style>
+</head>
+<body>
+
+<header class="topnav">
+    <div class="nav-inner">
+        <span class="brand-logo" aria-hidden="true">H</span>
+        <span class="brand-name">Homelab Gateway</span>
+        <span class="brand-sub">· 192.168.11.25</span>
+        <span class="spacer"></span>
+        <span class="chip">nginx :80</span>
+    </div>
+</header>
+
+<main class="container">
+
+    <section class="hero">
+        <h1 class="display">로컬 서비스 허브</h1>
+        <p class="subtitle">
+            homelab 통합 리버스 프록시입니다. 아래 카드에서 각 앱으로 이동하거나,
+            상태 표시등으로 현재 가동 여부를 확인할 수 있습니다.
+        </p>
+    </section>
+
+    <section class="card">
+        <header class="card-head">
+            <h2 class="heading-2">현재 상태</h2>
+            <button type="button" class="btn btn-secondary" id="btn-refresh">새로고침</button>
+        </header>
+        <div class="status-strip">
+            <span class="status-pill">
+                <span class="dot dot-pending" id="dot-summary"></span>
+                <span id="summary-status">확인 중…</span>
+            </span>
+            <span class="status-pill muted">마지막 확인 <span id="last-checked">—</span></span>
+            <span class="status-pill">
+                <span class="dot dot-pending" id="dot-proxy"></span>
+                nginx <span id="proxy-status">확인 중…</span>
+            </span>
+        </div>
+    </section>
+
+    <section class="card" id="live-stats-section">
+        <header class="card-head">
+            <h2 class="heading-2">LLM Gateway 실시간 집계</h2>
+            <span class="spacer"></span>
+            <span class="muted" id="stats-generated">로딩 중…</span>
+            <a class="btn btn-secondary" href="/llm/stats">상세 대시보드</a>
+        </header>
+        <p class="muted" id="stats-empty" style="display:none">아직 기록된 요청이 없습니다. osh·aim-monitor 등이 gateway를 호출하면 집계됩니다.</p>
+        <div id="stats-content" style="display:none">
+            <div class="kpi-row">
+                <div class="kpi">
+                    <span class="kpi-label">총 요청</span>
+                    <strong class="kpi-num" id="kpi-total">—</strong>
+                </div>
+                <div class="kpi">
+                    <span class="kpi-label">오늘 (KST)</span>
+                    <strong class="kpi-num" id="kpi-today">—</strong>
+                </div>
+                <div class="kpi">
+                    <span class="kpi-label">24시간</span>
+                    <strong class="kpi-num" id="kpi-24h">—</strong>
+                </div>
+            </div>
+            <div class="kpi-row mt-md">
+                <div class="kpi">
+                    <span class="kpi-label">성공률</span>
+                    <strong class="kpi-num" id="kpi-success">—</strong>
+                </div>
+                <div class="kpi">
+                    <span class="kpi-label">평균 지연</span>
+                    <strong class="kpi-num" id="kpi-latency">—</strong>
+                </div>
+                <div class="kpi">
+                    <span class="kpi-label">누적 비용</span>
+                    <strong class="kpi-num" id="kpi-cost">—</strong>
+                </div>
+            </div>
+            <div class="chart-grid-2 mt-md">
+                <div>
+                    <h3 class="heading-3">최근 24시간</h3>
+                    <div id="chart-h24"></div>
+                </div>
+                <div>
+                    <h3 class="heading-3">최근 7일</h3>
+                    <div id="chart-h7d"></div>
+                </div>
+            </div>
+            <div class="mt-md">
+                <h3 class="heading-3">서비스별 사용량</h3>
+                <div id="stats-by-service"></div>
+            </div>
+        </div>
+    </section>
+
+    <section class="card">
+        <header class="card-head">
+            <h2 class="heading-2">서비스</h2>
+            <span class="muted">LAN 내부 전용</span>
+        </header>
+
+        <div class="service-grid">
+
+            <article class="service-card">
+                <div class="service-card-head">
+                    <span class="service-name">OSH</span>
+                    <span class="dot dot-pending" id="dot-osh"></span>
+                </div>
+                <p class="service-desc">
+                    운영 대시보드 — 전국 날씨·대기·긴급재난·교통·뉴스를 한 화면에 모으고,
+                    Gemini 브리핑 카드로 상황을 요약합니다.
+                </p>
+                <code class="service-path">/osh/</code>
+                <div class="service-links">
+                    <a class="btn btn-primary" href="/osh/">앱 열기</a>
+                    <span class="badge-tag" id="status-osh">—</span>
+                </div>
+            </article>
+
+            <article class="service-card">
+                <div class="service-card-head">
+                    <span class="service-name">LLM Gateway</span>
+                    <span class="dot dot-pending" id="dot-llm"></span>
+                </div>
+                <p class="service-desc">
+                    Gemini / Vertex 중앙 passthrough. API 키 통합·내부 인증·
+                    서비스별 트래픽·비용 집계 웹 대시보드 (<code>/llm/stats</code>).
+                </p>
+                <code class="service-path">/llm/</code>
+                <div class="service-links">
+                    <a class="btn btn-primary" href="/llm/stats">앱 열기</a>
+                    <span class="badge-tag" id="status-llm">—</span>
+                </div>
+            </article>
+
+            <article class="service-card">
+                <div class="service-card-head">
+                    <span class="service-name">simpleStock</span>
+                    <span class="dot dot-pending" id="dot-simplestock"></span>
+                </div>
+                <p class="service-desc">
+                    주식·포트폴리오 웹 앱. Flask 기반으로 homelab에서
+                    별도 포트 없이 /simpleStock/ 경로로 접근합니다.
+                </p>
+                <code class="service-path">/simpleStock/</code>
+                <div class="service-links">
+                    <a class="btn btn-primary" href="/simpleStock/">앱 열기</a>
+                    <span class="badge-tag" id="status-simplestock">—</span>
+                </div>
+            </article>
+
+            <article class="service-card">
+                <div class="service-card-head">
+                    <span class="service-name">AIm</span>
+                    <span class="dot dot-pending" id="dot-aim"></span>
+                </div>
+                <p class="service-desc">
+                    AIm 프론트엔드. 모니터 콘솔·통계는 별도 서버
+                    <a href="http://192.168.11.23/aim/" style="color:var(--link-blue)">192.168.11.23</a>
+                    에서도 운영 중입니다.
+                </p>
+                <code class="service-path">/aim/</code>
+                <div class="service-links">
+                    <a class="btn btn-primary" href="/aim/">앱 열기</a>
+                    <span class="badge-tag" id="status-aim">—</span>
+                </div>
+            </article>
+
+            <article class="service-card">
+                <div class="service-card-head">
+                    <span class="service-name">myapi</span>
+                    <span class="dot dot-pending" id="dot-myapi"></span>
+                </div>
+                <p class="service-desc">
+                    통합 API·대시보드 백엔드. SQLite 기반 데이터와 SSE 등
+                    여러 homelab 클라이언트가 공유하는 API 레이어입니다.
+                </p>
+                <code class="service-path">/myapi/</code>
+                <div class="service-links">
+                    <a class="btn btn-primary" href="/myapi/">앱 열기</a>
+                    <span class="badge-tag" id="status-myapi">—</span>
+                </div>
+            </article>
+
+            <article class="service-card">
+                <div class="service-card-head">
+                    <span class="service-name">my-computer</span>
+                    <span class="dot dot-pending" id="dot-mycomputer"></span>
+                </div>
+                <p class="service-desc">
+                    로컬 PC 비서 Spring Boot 앱. REST API·MCP 엔드포인트로
+                    homelab 자동화·에이전트 연동에 사용합니다.
+                </p>
+                <code class="service-path">/my-computer/</code>
+                <div class="service-links">
+                    <a class="btn btn-primary" href="/my-computer/">앱 열기</a>
+                    <span class="badge-tag" id="status-mycomputer">—</span>
+                </div>
+            </article>
+
+        </div>
+    </section>
+
+    <section class="card">
+        <header class="card-head">
+            <h2 class="heading-2">인프라 요약</h2>
+        </header>
+        <table class="info-table">
+            <tbody>
+                <tr>
+                    <th>호스트</th>
+                    <td>192.168.11.25 (seunghyun homelab)</td>
+                </tr>
+                <tr>
+                    <th>프록시</th>
+                    <td>nginx · <code>/healthz</code> 로드밸런서 헬스체크</td>
+                </tr>
+                <tr>
+                    <th>LLM 키</th>
+                    <td>osh-ai-gateway (<code>/llm/</code>) — aim-monitor, osh 등 클라이언트 경유</td>
+                </tr>
+                <tr>
+                    <th>모니터 (.23)</th>
+                    <td><a href="http://192.168.11.23/aim/" style="color:var(--link-blue)">AIm Monitor 콘솔</a> · <a href="http://192.168.11.23/aim/stats" style="color:var(--link-blue)">통계</a></td>
+                </tr>
+            </tbody>
+        </table>
+        <p class="muted-small" style="margin-top:12px">
+            서비스 상태는 60초마다, LLM 집계는 60초마다 자동 갱신됩니다.
+        </p>
+    </section>
+
+</main>
+
+<footer class="footer">
+    Homelab Gateway · nginx reverse proxy
+</footer>
+
+<script>
+(function () {
+    var HEALTH_TIMEOUT_MS = 4000;
+    var LLM_HEALTH_TIMEOUT_MS = 2500;
+    var STATS_REFRESH_MS = 60000;
+
+    var SERVICES = [
+        { id: 'osh', health: '/osh/actuator/health', label: 'OSH' },
+        { id: 'llm', health: '/llm/health', label: 'LLM Gateway' },
+        { id: 'simplestock', health: '/simpleStock/health', label: 'simpleStock' },
+        { id: 'aim', health: '/aim/', label: 'AIm' },
+        { id: 'myapi', health: '/myapi/', label: 'myapi' },
+        { id: 'mycomputer', health: '/my-computer/', label: 'my-computer' },
+    ];
+
+    function fetchWithTimeout(url, ms) {
+        return new Promise(function (resolve, reject) {
+            var timer = setTimeout(function () {
+                reject(new Error('timeout'));
+            }, ms);
+            fetch(url, { method: 'GET', cache: 'no-store', credentials: 'same-origin' })
+                .then(function (res) {
+                    clearTimeout(timer);
+                    resolve(res);
+                })
+                .catch(function (err) {
+                    clearTimeout(timer);
+                    reject(err);
+                });
+        });
+    }
+
+    function setDot(id, state) {
+        var el = document.getElementById('dot-' + id);
+        if (!el) return;
+        el.className = 'dot dot-' + state;
+    }
+
+    function setCardStatus(id, state, detail) {
+        setDot(id, state);
+        var badge = document.getElementById('status-' + id);
+        if (badge) {
+            badge.textContent = detail;
+            badge.className = 'badge-tag status-badge status-' + state;
+        }
+    }
+
+    function checkOne(svc) {
+        var timeout = svc.id === 'llm' ? LLM_HEALTH_TIMEOUT_MS : HEALTH_TIMEOUT_MS;
+        return fetchWithTimeout(svc.health, timeout)
+            .then(function (res) {
+                var ok = res.ok;
+                var detail = ok ? '정상' : 'HTTP ' + res.status;
+                if (svc.id === 'llm' && ok) detail = '정상 · /llm/stats';
+                setCardStatus(svc.id, ok ? 'ok' : 'err', detail);
+                return ok;
+            })
+            .catch(function (err) {
+                if (svc.id === 'llm' && err.message === 'timeout') {
+                    setCardStatus(svc.id, 'warn', '워커 점유');
+                    return false;
+                }
+                var detail = err.message === 'timeout' ? '응답 지연' : '연결 실패';
+                setCardStatus(svc.id, 'err', detail);
+                return false;
+            });
+    }
+
+    function checkProxy() {
+        return fetchWithTimeout('/healthz', 3000)
+            .then(function (res) {
+                var ok = res.ok;
+                setDot('proxy', ok ? 'ok' : 'err');
+                var label = document.getElementById('proxy-status');
+                if (label) label.textContent = ok ? 'nginx 정상' : 'HTTP ' + res.status;
+                return ok;
+            })
+            .catch(function () {
+                setDot('proxy', 'err');
+                var label = document.getElementById('proxy-status');
+                if (label) label.textContent = '연결 실패';
+                return false;
+            });
+    }
+
+    function updateSummary(okCount, total) {
+        var el = document.getElementById('summary-status');
+        var dot = document.getElementById('dot-summary');
+        if (!el || !dot) return;
+        if (okCount === total) {
+            dot.className = 'dot dot-ok';
+            el.textContent = '전체 ' + total + '개 서비스 정상';
+        } else if (okCount > 0) {
+            dot.className = 'dot dot-warn';
+            el.textContent = okCount + ' / ' + total + ' 정상 · 일부 점검 필요';
+        } else {
+            dot.className = 'dot dot-err';
+            el.textContent = '서비스 응답 없음';
+        }
+    }
+
+    function fmtNum(n) {
+        return Number(n || 0).toLocaleString('ko-KR');
+    }
+
+    function setText(id, text) {
+        var el = document.getElementById(id);
+        if (el) el.textContent = text;
+    }
+
+    function renderBarChart(data, barWidth, step) {
+        var max = 0;
+        var i;
+        for (i = 0; i < data.length; i++) {
+            if (data[i].count > max) max = data[i].count;
+        }
+        if (!max) return '<p class="muted">요청 이력 없음.</p>';
+        var svg = '<svg viewBox="0 0 480 140" class="bar-chart" role="img">';
+        for (i = 0; i < data.length; i++) {
+            var b = data[i];
+            var h = max ? (b.count / max * 110) : 0;
+            var x = i * step;
+            var cx = x + barWidth / 2 + 3;
+            svg += '<rect x="' + (x + 3) + '" y="' + (120 - h) + '" width="' + barWidth + '" height="' + h + '" rx="2" class="bar-rect"></rect>';
+            if (i % 3 === 0 || data.length <= 7) {
+                svg += '<text x="' + cx + '" y="135" text-anchor="middle" class="bar-x">' + (b.label || '') + '</text>';
+            }
+            if (b.count > 0) {
+                svg += '<text x="' + cx + '" y="' + (120 - h - 4) + '" text-anchor="middle" class="bar-v">' + b.count + '</text>';
+            }
+        }
+        svg += '</svg>';
+        return svg;
+    }
+
+    function renderBarChart7d(data) {
+        var max = 0;
+        var i;
+        for (i = 0; i < data.length; i++) {
+            if (data[i].count > max) max = data[i].count;
+        }
+        if (!max) return '<p class="muted">요청 이력 없음.</p>';
+        var svg = '<svg viewBox="0 0 480 140" class="bar-chart" role="img">';
+        for (i = 0; i < data.length; i++) {
+            var b = data[i];
+            var h = max ? (b.count / max * 110) : 0;
+            var x = i * 65 + 10;
+            svg += '<rect x="' + x + '" y="' + (120 - h) + '" width="50" height="' + h + '" rx="3" class="bar-rect"></rect>';
+            svg += '<text x="' + (x + 25) + '" y="135" text-anchor="middle" class="bar-x">' + (b.label || '') + '</text>';
+            if (b.count > 0) {
+                svg += '<text x="' + (x + 25) + '" y="' + (120 - h - 4) + '" text-anchor="middle" class="bar-v">' + b.count + '</text>';
+            }
+        }
+        svg += '</svg>';
+        return svg;
+    }
+
+    function renderByService(rows) {
+        var el = document.getElementById('stats-by-service');
+        if (!el) return;
+        if (!rows.length) {
+            el.innerHTML = '<p class="muted">서비스별 데이터 없음.</p>';
+            return;
+        }
+        var html = '<table class="info-table"><thead><tr><th>서비스</th><th>요청</th><th>토큰</th><th>비용 (KRW)</th></tr></thead><tbody>';
+        rows.forEach(function (r) {
+            html += '<tr><td>' + (r.service_id || '—') + '</td><td>' + fmtNum(r.requests) +
+                '</td><td>' + fmtNum(r.tokens) + '</td><td>₩' + fmtNum(r.cost_krw) + '</td></tr>';
+        });
+        html += '</tbody></table>';
+        el.innerHTML = html;
+    }
+
+    function loadLiveStats() {
+        fetchWithTimeout('/llm/api/stats', 8000)
+            .then(function (res) {
+                if (!res.ok) throw new Error('HTTP ' + res.status);
+                return res.json();
+            })
+            .then(function (data) {
+                var gen = document.getElementById('stats-generated');
+                if (gen) {
+                    gen.textContent = data.generated_at ? '갱신 ' + data.generated_at : '갱신 완료';
+                }
+                var emptyEl = document.getElementById('stats-empty');
+                var contentEl = document.getElementById('stats-content');
+                if (data.empty) {
+                    if (emptyEl) emptyEl.style.display = '';
+                    if (contentEl) contentEl.style.display = 'none';
+                    return;
+                }
+                if (emptyEl) emptyEl.style.display = 'none';
+                if (contentEl) contentEl.style.display = '';
+                var s = data.summary || {};
+                setText('kpi-total', fmtNum(s.total_requests));
+                setText('kpi-today', fmtNum(s.today_requests));
+                setText('kpi-24h', fmtNum(s.last_24h_requests));
+                setText('kpi-success', (s.success_rate != null ? s.success_rate : 0) + '%');
+                setText('kpi-latency', fmtNum(s.avg_latency_ms) + ' ms');
+                setText('kpi-cost', '₩' + fmtNum(s.cost_krw));
+                var h24 = document.getElementById('chart-h24');
+                if (h24) h24.innerHTML = renderBarChart(data.h24 || [], 14, 20);
+                var h7d = document.getElementById('chart-h7d');
+                if (h7d) h7d.innerHTML = renderBarChart7d(data.h7d || []);
+                renderByService(data.by_service || []);
+                if (gen && s.last_24h_requests === 0 && s.total_requests > 0 && data.recent && data.recent.length) {
+                    gen.textContent = (data.generated_at ? '갱신 ' + data.generated_at + ' · ' : '') +
+                        '최근 24h 요청 없음 (마지막 ' + data.recent[0].ts + ')';
+                }
+            })
+            .catch(function () {
+                var gen = document.getElementById('stats-generated');
+                if (gen) gen.textContent = '집계 불러오기 실패';
+            });
+    }
+
+    function refresh() {
+        setDot('summary', 'pending');
+        document.getElementById('summary-status').textContent = '확인 중…';
+        setDot('proxy', 'pending');
+        document.getElementById('proxy-status').textContent = '확인 중…';
+
+        SERVICES.forEach(function (svc) {
+            setDot(svc.id, 'pending');
+            var badge = document.getElementById('status-' + svc.id);
+            if (badge) badge.textContent = '확인 중…';
+        });
+
+        var checks = [checkProxy()].concat(SERVICES.map(checkOne));
+        Promise.all(checks).then(function (results) {
+            var serviceResults = results.slice(1);
+            var ok = serviceResults.filter(Boolean).length;
+            updateSummary(ok, SERVICES.length);
+            var ts = document.getElementById('last-checked');
+            if (ts) {
+                ts.textContent = new Date().toLocaleString('ko-KR', { hour12: false });
+            }
+        });
+        loadLiveStats();
+    }
+
+    var btn = document.getElementById('btn-refresh');
+    if (btn) btn.addEventListener('click', refresh);
+    refresh();
+    setInterval(refresh, STATS_REFRESH_MS);
+})();
+
+</script>
+</body>
+</html>

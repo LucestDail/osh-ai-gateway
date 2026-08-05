@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Homelab Gateway — 192.168.11.25</title>
+    <style>
+{{CSS}}
+    </style>
+</head>
+<body>
+
+<header class="topnav">
+    <div class="nav-inner">
+        <span class="brand-logo" aria-hidden="true">H</span>
+        <span class="brand-name">Homelab Gateway</span>
+        <span class="brand-sub">· 192.168.11.25</span>
+        <span class="spacer"></span>
+        <span class="chip">nginx :80</span>
+    </div>
+</header>
+
+<main class="container">
+
+    <section class="hero">
+        <h1 class="display">로컬 서비스 허브</h1>
+        <p class="subtitle">
+            homelab 통합 리버스 프록시입니다. 아래 카드에서 각 앱으로 이동하거나,
+            상태 표시등으로 현재 가동 여부를 확인할 수 있습니다.
+        </p>
+    </section>
+
+    <section class="card">
+        <header class="card-head">
+            <h2 class="heading-2">현재 상태</h2>
+            <button type="button" class="btn btn-secondary" id="btn-refresh">새로고침</button>
+        </header>
+        <div class="status-strip">
+            <span class="status-pill">
+                <span class="dot dot-pending" id="dot-summary"></span>
+                <span id="summary-status">확인 중…</span>
+            </span>
+            <span class="status-pill muted">마지막 확인 <span id="last-checked">—</span></span>
+            <span class="status-pill">
+                <span class="dot dot-pending" id="dot-proxy"></span>
+                nginx <span id="proxy-status">확인 중…</span>
+            </span>
+        </div>
+    </section>
+
+    <section class="card" id="live-stats-section">
+        <header class="card-head">
+            <h2 class="heading-2">LLM Gateway 실시간 집계</h2>
+            <span class="spacer"></span>
+            <span class="muted" id="stats-generated">로딩 중…</span>
+            <a class="btn btn-secondary" href="/llm/stats">상세 대시보드</a>
+        </header>
+        <p class="muted" id="stats-empty" style="display:none">아직 기록된 요청이 없습니다. osh·aim-monitor 등이 gateway를 호출하면 집계됩니다.</p>
+        <div id="stats-content" style="display:none">
+            <div class="kpi-row">
+                <div class="kpi">
+                    <span class="kpi-label">총 요청</span>
+                    <strong class="kpi-num" id="kpi-total">—</strong>
+                </div>
+                <div class="kpi">
+                    <span class="kpi-label">오늘 (KST)</span>
+                    <strong class="kpi-num" id="kpi-today">—</strong>
+                </div>
+                <div class="kpi">
+                    <span class="kpi-label">24시간</span>
+                    <strong class="kpi-num" id="kpi-24h">—</strong>
+                </div>
+            </div>
+            <div class="kpi-row mt-md">
+                <div class="kpi">
+                    <span class="kpi-label">성공률</span>
+                    <strong class="kpi-num" id="kpi-success">—</strong>
+                </div>
+                <div class="kpi">
+                    <span class="kpi-label">평균 지연</span>
+                    <strong class="kpi-num" id="kpi-latency">—</strong>
+                </div>
+                <div class="kpi">
+                    <span class="kpi-label">누적 비용</span>
+                    <strong class="kpi-num" id="kpi-cost">—</strong>
+                </div>
+            </div>
+            <div class="chart-grid-2 mt-md">
+                <div>
+                    <h3 class="heading-3">최근 24시간</h3>
+                    <div id="chart-h24"></div>
+                </div>
+                <div>
+                    <h3 class="heading-3">최근 7일</h3>
+                    <div id="chart-h7d"></div>
+                </div>
+            </div>
+            <div class="mt-md">
+                <h3 class="heading-3">서비스별 사용량</h3>
+                <div id="stats-by-service"></div>
+            </div>
+        </div>
+    </section>
+
+    <section class="card">
+        <header class="card-head">
+            <h2 class="heading-2">서비스</h2>
+            <span class="muted">LAN 내부 전용</span>
+        </header>
+
+        <div class="service-grid">
+
+            <article class="service-card">
+                <div class="service-card-head">
+                    <span class="service-name">OSH</span>
+                    <span class="dot dot-pending" id="dot-osh"></span>
+                </div>
+                <p class="service-desc">
+                    운영 대시보드 — 전국 날씨·대기·긴급재난·교통·뉴스를 한 화면에 모으고,
+                    Gemini 브리핑 카드로 상황을 요약합니다.
+                </p>
+                <code class="service-path">/osh/</code>
+                <div class="service-links">
+                    <a class="btn btn-primary" href="/osh/">앱 열기</a>
+                    <span class="badge-tag" id="status-osh">—</span>
+                </div>
+            </article>
+
+            <article class="service-card">
+                <div class="service-card-head">
+                    <span class="service-name">LLM Gateway</span>
+                    <span class="dot dot-pending" id="dot-llm"></span>
+                </div>
+                <p class="service-desc">
+                    Gemini / Vertex 중앙 passthrough. API 키 통합·내부 인증·
+                    서비스별 트래픽·비용 집계 웹 대시보드 (<code>/llm/stats</code>).
+                </p>
+                <code class="service-path">/llm/</code>
+                <div class="service-links">
+                    <a class="btn btn-primary" href="/llm/stats">앱 열기</a>
+                    <span class="badge-tag" id="status-llm">—</span>
+                </div>
+            </article>
+
+            <article class="service-card">
+                <div class="service-card-head">
+                    <span class="service-name">simpleStock</span>
+                    <span class="dot dot-pending" id="dot-simplestock"></span>
+                </div>
+                <p class="service-desc">
+                    주식·포트폴리오 웹 앱. Flask 기반으로 homelab에서
+                    별도 포트 없이 /simpleStock/ 경로로 접근합니다.
+                </p>
+                <code class="service-path">/simpleStock/</code>
+                <div class="service-links">
+                    <a class="btn btn-primary" href="/simpleStock/">앱 열기</a>
+                    <span class="badge-tag" id="status-simplestock">—</span>
+                </div>
+            </article>
+
+            <article class="service-card">
+                <div class="service-card-head">
+                    <span class="service-name">AIm</span>
+                    <span class="dot dot-pending" id="dot-aim"></span>
+                </div>
+                <p class="service-desc">
+                    AIm 프론트엔드. 모니터 콘솔·통계는 별도 서버
+                    <a href="http://192.168.11.23/aim/" style="color:var(--link-blue)">192.168.11.23</a>
+                    에서도 운영 중입니다.
+                </p>
+                <code class="service-path">/aim/</code>
+                <div class="service-links">
+                    <a class="btn btn-primary" href="/aim/">앱 열기</a>
+                    <span class="badge-tag" id="status-aim">—</span>
+                </div>
+            </article>
+
+            <article class="service-card">
+                <div class="service-card-head">
+                    <span class="service-name">myapi</span>
+                    <span class="dot dot-pending" id="dot-myapi"></span>
+                </div>
+                <p class="service-desc">
+                    통합 API·대시보드 백엔드. SQLite 기반 데이터와 SSE 등
+                    여러 homelab 클라이언트가 공유하는 API 레이어입니다.
+                </p>
+                <code class="service-path">/myapi/</code>
+                <div class="service-links">
+                    <a class="btn btn-primary" href="/myapi/">앱 열기</a>
+                    <span class="badge-tag" id="status-myapi">—</span>
+                </div>
+            </article>
+
+            <article class="service-card">
+                <div class="service-card-head">
+                    <span class="service-name">my-computer</span>
+                    <span class="dot dot-pending" id="dot-mycomputer"></span>
+                </div>
+                <p class="service-desc">
+                    로컬 PC 비서 Spring Boot 앱. REST API·MCP 엔드포인트로
+                    homelab 자동화·에이전트 연동에 사용합니다.
+                </p>
+                <code class="service-path">/my-computer/</code>
+                <div class="service-links">
+                    <a class="btn btn-primary" href="/my-computer/">앱 열기</a>
+                    <span class="badge-tag" id="status-mycomputer">—</span>
+                </div>
+            </article>
+
+        </div>
+    </section>
+
+    <section class="card">
+        <header class="card-head">
+            <h2 class="heading-2">인프라 요약</h2>
+        </header>
+        <table class="info-table">
+            <tbody>
+                <tr>
+                    <th>호스트</th>
+                    <td>192.168.11.25 (seunghyun homelab)</td>
+                </tr>
+                <tr>
+                    <th>프록시</th>
+                    <td>nginx · <code>/healthz</code> 로드밸런서 헬스체크</td>
+                </tr>
+                <tr>
+                    <th>LLM 키</th>
+                    <td>osh-ai-gateway (<code>/llm/</code>) — aim-monitor, osh 등 클라이언트 경유</td>
+                </tr>
+                <tr>
+                    <th>모니터 (.23)</th>
+                    <td><a href="http://192.168.11.23/aim/" style="color:var(--link-blue)">AIm Monitor 콘솔</a> · <a href="http://192.168.11.23/aim/stats" style="color:var(--link-blue)">통계</a></td>
+                </tr>
+            </tbody>
+        </table>
+        <p class="muted-small" style="margin-top:12px">
+            서비스 상태는 60초마다, LLM 집계는 60초마다 자동 갱신됩니다.
+        </p>
+    </section>
+
+</main>
+
+<footer class="footer">
+    Homelab Gateway · nginx reverse proxy
+</footer>
+
+<script>
+{{JS}}
+</script>
+</body>
+</html>

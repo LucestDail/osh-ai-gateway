@@ -25,7 +25,9 @@ def _connect() -> sqlite3.Connection:
     if path is None:
         raise RuntimeError("USAGE_DB_PATH is not configured")
     path.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(path, check_same_thread=False)
+    conn = sqlite3.connect(path, check_same_thread=False, timeout=5.0)
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA busy_timeout=5000")
     conn.row_factory = sqlite3.Row
     return conn
 
@@ -73,33 +75,36 @@ def insert_record(record: dict[str, Any]) -> None:
     if path is None:
         return
     usage = record.get("usage") or {}
-    with _lock:
-        conn = _connect()
-        try:
-            ensure_schema(conn)
-            conn.execute(
-                """
-                INSERT INTO usage_log (
-                    ts, backend, service_id, method, path, status, elapsed_ms,
-                    prompt_tokens, candidates_tokens, total_tokens
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    record["ts"],
-                    record["backend"],
-                    record["service_id"],
-                    record["method"],
-                    record["path"],
-                    int(record["status"]),
-                    float(record["elapsed_ms"]),
-                    usage.get("promptTokenCount"),
-                    usage.get("candidatesTokenCount"),
-                    usage.get("totalTokenCount"),
-                ),
-            )
-            conn.commit()
-        finally:
-            conn.close()
+    conn = _connect()
+    try:
+        ensure_schema(conn)
+        conn.execute(
+            """
+            INSERT INTO usage_log (
+                ts, backend, service_id, method, path, status, elapsed_ms,
+                prompt_tokens, candidates_tokens, total_tokens
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                record["ts"],
+                record["backend"],
+                record["service_id"],
+                record["method"],
+                record["path"],
+                int(record["status"]),
+                float(record["elapsed_ms"]),
+                usage.get("promptTokenCount"),
+                usage.get("candidatesTokenCount"),
+                usage.get("totalTokenCount"),
+            ),
+        )
+        conn.commit()
+    except sqlite3.OperationalError:
+        # 외부 잠금·경합 시 요청 처리는 이미 끝난 상태 — 로깅만 건너뜀
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
 
 
 def open_readonly() -> sqlite3.Connection | None:

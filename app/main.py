@@ -14,6 +14,8 @@ from app.middleware.auth import InternalAuthMiddleware
 from app.services.proxy import proxy_service
 from pathlib import Path
 
+ROOT_PATH = settings.public_root_path.rstrip("/")
+
 logging.basicConfig(
     level=logging.DEBUG if settings.debug else logging.INFO,
     format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
@@ -41,7 +43,8 @@ app.mount("/static", StaticFiles(directory=str(Path(__file__).resolve().parent /
 
 @app.get("/")
 async def root() -> dict[str, str]:
-    return {"message": "OSH AI Gateway is running", "stats": "/stats"}
+    stats_path = f"{ROOT_PATH}/stats" if ROOT_PATH else "/stats"
+    return {"message": "OSH AI Gateway is running", "stats": stats_path}
 
 
 @app.get("/health")

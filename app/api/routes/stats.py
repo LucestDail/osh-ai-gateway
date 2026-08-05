@@ -9,23 +9,29 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 
 from app.services import stats as stats_mod
+from app.config.settings import settings
 from app.services.usage_store import open_readonly
 
 router = APIRouter()
 templates = Jinja2Templates(directory=str(Path(__file__).resolve().parents[2] / "templates"))
+ROOT_PATH = settings.public_root_path.rstrip("/")
+
+
+def _template_ctx(request: Request, **extra: object) -> dict[str, object]:
+    return {"request": request, "root": ROOT_PATH, **extra}
 
 
 @router.get("/stats", response_class=HTMLResponse)
 async def stats_page(request: Request) -> HTMLResponse:
     conn = open_readonly()
     if conn is None:
-        ctx = {"request": request, "empty": True, "no_db": True}
-        return templates.TemplateResponse(request, "stats.html", ctx)
+        return templates.TemplateResponse(
+            request, "stats.html", _template_ctx(request, empty=True, no_db=True)
+        )
 
     try:
         data = stats_mod.build_dashboard(conn)
-        ctx = {"request": request, **data}
-        return templates.TemplateResponse(request, "stats.html", ctx)
+        return templates.TemplateResponse(request, "stats.html", _template_ctx(request, **data))
     finally:
         conn.close()
 

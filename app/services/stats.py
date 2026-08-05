@@ -62,12 +62,14 @@ def summary(conn: sqlite3.Connection) -> dict[str, Any]:
         """,
         (today_start_utc,),
     ).fetchone()
+    last24_cutoff = (_kst_now() - timedelta(hours=24)).astimezone(timezone.utc).isoformat()
     last24 = conn.execute(
         """
         SELECT COUNT(*) AS c
         FROM usage_log
-        WHERE ts >= datetime('now', '-24 hours')
-        """
+        WHERE ts >= ?
+        """,
+        (last24_cutoff,),
     ).fetchone()
     total = int(row["total"] or 0)
     ok = int(row["ok"] or 0)

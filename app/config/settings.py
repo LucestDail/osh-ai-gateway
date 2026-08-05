@@ -12,6 +12,9 @@ class Settings(BaseSettings):
     server_port: int = 8780
     debug: bool = False
 
+    # nginx reverse-proxy prefix (e.g. /llm). Empty = served at root.
+    public_root_path: str = ""
+
     # Internal LAN auth — empty disables check (dev only).
     gateway_internal_token: str = ""
 

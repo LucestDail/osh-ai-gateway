@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>OSH AI Gateway — 트래픽 통계</title>
-    <link rel="stylesheet" href="/static/style.css">
+    <link rel="stylesheet" href="{{ root }}/static/style.css">
     <link rel="preconnect" href="https://rsms.me/">
     <link rel="stylesheet" href="https://rsms.me/inter/inter.css">
 </head>
@@ -16,17 +16,18 @@
         <span class="brand-name">OSH AI Gateway</span>
         <span class="brand-sub">· 트래픽 집계</span>
         <span class="spacer"></span>
-        <a href="/" class="link-quiet">홈</a>
-        <a href="/stats" class="link-quiet">새로고침</a>
-        <a href="/api/stats" class="link-quiet">JSON</a>
+        <a href="{{ root }}/" class="link-quiet">홈</a>
+        <a href="{{ root }}/stats" class="link-quiet">새로고침</a>
+        <a href="{{ root }}/api/stats" class="link-quiet">JSON</a>
     </div>
 </header>
 
 <main class="container">
+
     <section class="hero">
-        <h1 class="display">LLM Gateway 트래픽</h1>
+        <h1 class="display">데이터로 보는 Gateway 운영</h1>
         <p class="subtitle">
-            KST 기준 · 저장소 <code>data/usage.db</code>
+            모든 시각은 KST 기준. 데이터 소스: <code>data/usage.db</code>
             {% if generated_at %} · 갱신 {{ generated_at }}{% endif %}
         </p>
     </section>
@@ -37,94 +38,155 @@
     </section>
 {% elif empty %}
     <section class="card">
-        <p class="muted">아직 기록된 요청이 없습니다. aim-monitor 등 클라이언트가 gateway 를 호출하면 집계됩니다.</p>
+        <p class="muted">아직 기록된 요청이 없습니다. aim-monitor, osh 등 클라이언트가 gateway 를 호출하면 집계됩니다.</p>
     </section>
 {% else %}
 
+    <!-- ① 요약 ───────────────────────────────────── -->
     <section class="card">
         <header class="card-head">
-            <h2 class="heading-2">요약</h2>
+            <h2 class="heading-2">① 트래픽 요약</h2>
+            <span class="path-tag">usage_log · KST</span>
         </header>
-        <div class="kpi-grid">
+
+        <div class="kpi-row">
             <div class="kpi">
-                <div class="kpi-label">총 요청</div>
-                <div class="kpi-value">{{ summary.total_requests | int }}</div>
+                <span class="kpi-label">총 요청</span>
+                <strong class="kpi-num">{{ summary.total_requests | int }}</strong>
             </div>
             <div class="kpi">
-                <div class="kpi-label">오늘 (KST)</div>
-                <div class="kpi-value">{{ summary.today_requests | int }}</div>
-                <div class="kpi-sub">{{ summary.today_tokens | int }} tokens</div>
+                <span class="kpi-label">오늘 (KST)</span>
+                <strong class="kpi-num">{{ summary.today_requests | int }}</strong>
             </div>
             <div class="kpi">
-                <div class="kpi-label">24시간</div>
-                <div class="kpi-value">{{ summary.last_24h_requests | int }}</div>
+                <span class="kpi-label">24시간</span>
+                <strong class="kpi-num">{{ summary.last_24h_requests | int }}</strong>
+            </div>
+        </div>
+
+        <div class="kpi-row mt-md">
+            <div class="kpi">
+                <span class="kpi-label">성공률</span>
+                <strong class="kpi-num">{{ summary.success_rate }}%</strong>
             </div>
             <div class="kpi">
-                <div class="kpi-label">성공률</div>
-                <div class="kpi-value">{{ summary.success_rate }}%</div>
-                <div class="kpi-sub">오류 {{ summary.error_count | int }}건</div>
+                <span class="kpi-label">총 토큰</span>
+                <strong class="kpi-num">{{ '{:,}'.format(summary.total_tokens | int) }}</strong>
             </div>
             <div class="kpi">
-                <div class="kpi-label">총 토큰</div>
-                <div class="kpi-value">{{ summary.total_tokens | int }}</div>
+                <span class="kpi-label">평균 지연</span>
+                <strong class="kpi-num">{{ summary.avg_latency_ms }}<span style="font-size:0.55em;font-weight:500"> ms</span></strong>
+            </div>
+        </div>
+
+        <div class="kpi-row mt-md">
+            <div class="kpi">
+                <span class="kpi-label">누적 비용 (KRW)</span>
+                <strong class="kpi-num">₩{{ '{:,}'.format(summary.cost_krw) }}</strong>
             </div>
             <div class="kpi">
-                <div class="kpi-label">평균 지연</div>
-                <div class="kpi-value">{{ summary.avg_latency_ms }}<span style="font-size:0.9rem">ms</span></div>
+                <span class="kpi-label">누적 비용 (USD)</span>
+                <strong class="kpi-num">${{ '%.4f' | format(summary.cost_usd) }}</strong>
             </div>
             <div class="kpi">
-                <div class="kpi-label">누적 비용</div>
-                <div class="kpi-value">₩{{ '{:,}'.format(summary.cost_krw) }}</div>
-                <div class="kpi-sub">${{ '%.4f' | format(summary.cost_usd) }}</div>
+                <span class="kpi-label">오류</span>
+                <strong class="kpi-num">{{ summary.error_count | int }}</strong>
             </div>
         </div>
     </section>
 
+
+    <!-- ② 요청 분포 ─────────────────────────────── -->
     <section class="card">
         <header class="card-head">
-            <h2 class="heading-2">비용 추정</h2>
+            <h2 class="heading-2">② 요청 분포</h2>
+            <span class="path-tag">KST</span>
+        </header>
+
+        <div class="chart-grid-2">
+            <div>
+                <h3 class="heading-3">최근 24시간 (시간대별)</h3>
+                {% set max24 = h24 | map(attribute='count') | max %}
+                {% if max24 == 0 %}<p class="muted">요청 이력 없음.</p>{% else %}
+                <svg viewBox="0 0 480 140" class="bar-chart" role="img" aria-label="24h">
+                    {% for b in h24 %}
+                        {% set h = (b.count / max24 * 110) | round(2) if max24 else 0 %}
+                        {% set x = loop.index0 * 20 %}
+                        <rect x="{{ x + 3 }}" y="{{ 120 - h }}" width="14" height="{{ h }}"
+                              rx="2" class="bar-rect"></rect>
+                        <text x="{{ x + 10 }}" y="135" text-anchor="middle" class="bar-x">
+                            {{ b.label if loop.index0 % 3 == 0 else '' }}
+                        </text>
+                        {% if b.count > 0 %}
+                        <text x="{{ x + 10 }}" y="{{ 120 - h - 4 }}" text-anchor="middle" class="bar-v">
+                            {{ b.count }}
+                        </text>
+                        {% endif %}
+                    {% endfor %}
+                </svg>
+                {% endif %}
+            </div>
+
+            <div>
+                <h3 class="heading-3">최근 7일 (일별)</h3>
+                {% set max7 = h7d | map(attribute='count') | max %}
+                {% if max7 == 0 %}<p class="muted">요청 이력 없음.</p>{% else %}
+                <svg viewBox="0 0 480 140" class="bar-chart" role="img" aria-label="7d">
+                    {% for b in h7d %}
+                        {% set h = (b.count / max7 * 110) | round(2) if max7 else 0 %}
+                        {% set x = loop.index0 * 65 + 10 %}
+                        <rect x="{{ x }}" y="{{ 120 - h }}" width="50" height="{{ h }}"
+                              rx="3" class="bar-rect"></rect>
+                        <text x="{{ x + 25 }}" y="135" text-anchor="middle" class="bar-x">
+                            {{ b.label }}
+                        </text>
+                        {% if b.count > 0 %}
+                        <text x="{{ x + 25 }}" y="{{ 120 - h - 4 }}" text-anchor="middle" class="bar-v">
+                            {{ b.count }}
+                        </text>
+                        {% endif %}
+                    {% endfor %}
+                </svg>
+                {% endif %}
+            </div>
+        </div>
+    </section>
+
+
+    <!-- ③ 비용 추정 ─────────────────────────────── -->
+    <section class="card">
+        <header class="card-head">
+            <h2 class="heading-2">③ Gemini 비용 추정</h2>
             <span class="path-tag">
                 in ${{ cost.params.price_in_per_m_usd }}/M ·
                 out ${{ cost.params.price_out_per_m_usd }}/M ·
                 ₩{{ cost.params.usd_krw|int }}/USD
             </span>
         </header>
-        <p class="muted" style="margin-top:0">{{ cost.note }}</p>
-        <div class="kpi-grid">
+
+        <div class="kpi-row">
             <div class="kpi">
-                <div class="kpi-label">입력 토큰</div>
-                <div class="kpi-value">{{ '{:,}'.format(cost.total_prompt_tokens) }}</div>
+                <span class="kpi-label">입력 토큰</span>
+                <strong class="kpi-num">{{ '{:,}'.format(cost.total_prompt_tokens) }}</strong>
             </div>
             <div class="kpi">
-                <div class="kpi-label">출력 토큰</div>
-                <div class="kpi-value">{{ '{:,}'.format(cost.total_output_tokens) }}</div>
+                <span class="kpi-label">출력 토큰</span>
+                <strong class="kpi-num">{{ '{:,}'.format(cost.total_output_tokens) }}</strong>
             </div>
             <div class="kpi">
-                <div class="kpi-label">누적 (USD)</div>
-                <div class="kpi-value">${{ '%.4f' | format(cost.total_usd) }}</div>
-            </div>
-            <div class="kpi">
-                <div class="kpi-label">누적 (KRW)</div>
-                <div class="kpi-value">₩{{ '{:,}'.format(cost.total_krw) }}</div>
-            </div>
-            <div class="kpi">
-                <div class="kpi-label">월 예상 (USD)</div>
-                <div class="kpi-value">${{ '%.4f' | format(cost.monthly_est_usd) }}</div>
-                <div class="kpi-sub">최근 7일 일평균 × 30</div>
-            </div>
-            <div class="kpi">
-                <div class="kpi-label">월 예상 (KRW)</div>
-                <div class="kpi-value">₩{{ '{:,}'.format(cost.monthly_est_krw) }}</div>
+                <span class="kpi-label">월 예상 (KRW)</span>
+                <strong class="kpi-num">₩{{ '{:,}'.format(cost.monthly_est_krw) }}</strong>
             </div>
         </div>
-        <table class="data" style="margin-top:1rem">
+
+        <table class="comparison-table mt-md">
             <thead>
                 <tr><th>날짜</th><th>요청</th><th>in tok</th><th>out tok</th><th>USD</th><th>KRW</th></tr>
             </thead>
             <tbody>
                 {% for r in cost.per_day %}
                 <tr>
-                    <td>{{ r.label }}</td>
+                    <td class="mono-small">{{ r.label }}</td>
                     <td>{{ r.requests }}</td>
                     <td>{{ '{:,}'.format(r.prompt_tokens) }}</td>
                     <td>{{ '{:,}'.format(r.output_tokens) }}</td>
@@ -134,57 +196,19 @@
                 {% endfor %}
             </tbody>
         </table>
+
+        <p class="muted-small mt-sm">{{ cost.note }}</p>
     </section>
 
-    <section class="card">
-        <header class="card-head">
-            <h2 class="heading-2">요청 분포</h2>
-            <span class="path-tag">KST</span>
-        </header>
-        <div class="chart-grid-2">
-            <div>
-                <h3 class="heading-3">최근 24시간</h3>
-                {% set max24 = h24 | map(attribute='count') | max %}
-                {% if max24 == 0 %}<p class="muted">데이터 없음</p>{% else %}
-                <svg viewBox="0 0 480 140" class="bar-chart" role="img">
-                    {% for b in h24 %}
-                        {% set h = (b.count / max24 * 110) | round(2) %}
-                        {% set x = loop.index0 * 20 %}
-                        <rect x="{{ x + 3 }}" y="{{ 120 - h }}" width="14" height="{{ h }}" rx="2" class="bar-rect"></rect>
-                        <text x="{{ x + 10 }}" y="135" text-anchor="middle" class="bar-x">{{ b.label if loop.index0 % 3 == 0 else '' }}</text>
-                        {% if b.count > 0 %}
-                        <text x="{{ x + 10 }}" y="{{ 120 - h - 4 }}" text-anchor="middle" class="bar-v">{{ b.count }}</text>
-                        {% endif %}
-                    {% endfor %}
-                </svg>
-                {% endif %}
-            </div>
-            <div>
-                <h3 class="heading-3">최근 7일</h3>
-                {% set max7 = h7d | map(attribute='count') | max %}
-                {% if max7 == 0 %}<p class="muted">데이터 없음</p>{% else %}
-                <svg viewBox="0 0 480 140" class="bar-chart" role="img">
-                    {% for b in h7d %}
-                        {% set h = (b.count / max7 * 110) | round(2) %}
-                        {% set x = loop.index0 * 65 + 10 %}
-                        <rect x="{{ x }}" y="{{ 120 - h }}" width="50" height="{{ h }}" rx="3" class="bar-rect"></rect>
-                        <text x="{{ x + 25 }}" y="135" text-anchor="middle" class="bar-x">{{ b.label }}</text>
-                        {% if b.count > 0 %}
-                        <text x="{{ x + 25 }}" y="{{ 120 - h - 4 }}" text-anchor="middle" class="bar-v">{{ b.count }}</text>
-                        {% endif %}
-                    {% endfor %}
-                </svg>
-                {% endif %}
-            </div>
-        </div>
-    </section>
 
+    <!-- ④ 서비스별 ─────────────────────────────── -->
     <section class="card">
         <header class="card-head">
-            <h2 class="heading-2">서비스별</h2>
+            <h2 class="heading-2">④ 서비스별 사용량</h2>
             <span class="path-tag">X-Service-Id</span>
         </header>
-        <table class="data">
+
+        <table class="comparison-table">
             <thead>
                 <tr>
                     <th>서비스</th>
@@ -199,10 +223,10 @@
             <tbody>
                 {% for row in by_service %}
                 <tr>
-                    <td><span class="pill">{{ row.service_id }}</span></td>
+                    <td><span class="badge-tag">{{ row.service_id }}</span></td>
                     <td>{{ row.requests }}</td>
                     <td class="{{ 'status-err' if row.errors else '' }}">{{ row.errors }}</td>
-                    <td>{{ row.tokens }}</td>
+                    <td>{{ '{:,}'.format(row.tokens) }}</td>
                     <td>${{ '%.5f' | format(row.cost_usd) }}</td>
                     <td>₩{{ '{:,}'.format(row.cost_krw) }}</td>
                     <td>{{ row.avg_ms }}</td>
@@ -212,21 +236,24 @@
         </table>
     </section>
 
+
+    <!-- ⑤ 백엔드 · HTTP ─────────────────────────── -->
     <section class="card">
         <header class="card-head">
-            <h2 class="heading-2">백엔드 · HTTP 상태</h2>
+            <h2 class="heading-2">⑤ 백엔드 · HTTP 상태</h2>
         </header>
+
         <div class="chart-grid-2">
             <div>
                 <h3 class="heading-3">Backend</h3>
-                <table class="data">
+                <table class="comparison-table">
                     <thead><tr><th>backend</th><th>요청</th><th>토큰</th></tr></thead>
                     <tbody>
                         {% for row in by_backend %}
                         <tr>
-                            <td>{{ row.backend }}</td>
+                            <td><code class="mono-small">{{ row.backend }}</code></td>
                             <td>{{ row.requests }}</td>
-                            <td>{{ row.tokens }}</td>
+                            <td>{{ '{:,}'.format(row.tokens) }}</td>
                         </tr>
                         {% endfor %}
                     </tbody>
@@ -234,12 +261,19 @@
             </div>
             <div>
                 <h3 class="heading-3">Status</h3>
-                <table class="data">
+                <table class="comparison-table">
                     <thead><tr><th>code</th><th>count</th></tr></thead>
                     <tbody>
                         {% for row in status_breakdown %}
                         <tr>
-                            <td class="{{ 'status-ok' if row.status < 400 else 'status-err' }}">{{ row.status }}</td>
+                            <td>
+                                <span class="score-pill
+                                    {% if row.status < 400 %}score-high
+                                    {% elif row.status < 500 %}score-mid
+                                    {% else %}score-none{% endif %}">
+                                    {{ row.status }}
+                                </span>
+                            </td>
                             <td>{{ row.count }}</td>
                         </tr>
                         {% endfor %}
@@ -249,12 +283,15 @@
         </div>
     </section>
 
+
+    <!-- ⑥ 최근 요청 ─────────────────────────────── -->
     <section class="card">
         <header class="card-head">
-            <h2 class="heading-2">최근 요청</h2>
+            <h2 class="heading-2">⑥ 최근 요청</h2>
             <span class="path-tag">최대 40건</span>
         </header>
-        <table class="data">
+
+        <table class="comparison-table">
             <thead>
                 <tr>
                     <th>시각 (KST)</th>
@@ -269,7 +306,7 @@
             <tbody>
                 {% for row in recent %}
                 <tr>
-                    <td class="mono">{{ row.ts }}</td>
+                    <td class="mono-small">{{ row.ts }}</td>
                     <td>{{ row.service_id }}</td>
                     <td>{{ row.backend }}</td>
                     <td class="{{ 'status-ok' if row.status < 400 else 'status-err' }}">{{ row.status }}</td>
@@ -283,6 +320,12 @@
     </section>
 
 {% endif %}
+
 </main>
+
+<footer class="footer">
+    <p class="muted-small">OSH AI Gateway · KST 기준 집계</p>
+</footer>
+
 </body>
 </html>

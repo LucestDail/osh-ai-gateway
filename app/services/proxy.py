@@ -8,6 +8,7 @@ from typing import AsyncIterator, Mapping
 import httpx
 from fastapi import HTTPException, Request, Response
 from fastapi.responses import StreamingResponse
+from starlette.background import BackgroundTask
 
 from app.config.settings import settings
 from app.services.usage_logger import log_request
@@ -49,7 +50,8 @@ def _is_stream_request(path: str, query: str) -> bool:
 
 class ProxyService:
     def __init__(self) -> None:
-        self._client = httpx.AsyncClient(follow_redirects=False)
+        limits = httpx.Limits(max_connections=200, max_keepalive_connections=50)
+        self._client = httpx.AsyncClient(follow_redirects=False, limits=limits)
 
     async def close(self) -> None:
         await self._client.aclose()
@@ -171,15 +173,7 @@ class ProxyService:
 
         elapsed_ms = (time.perf_counter() - started) * 1000
         content = upstream.content
-        log_request(
-            backend=backend,
-            service_id=service_id,
-            method=method,
-            path=path,
-            status_code=upstream.status_code,
-            elapsed_ms=elapsed_ms,
-            response_body=content if upstream.status_code == 200 else None,
-        )
+        log_body = content if upstream.status_code == 200 else None
 
         response_headers = {
             k: v
@@ -191,6 +185,16 @@ class ProxyService:
             status_code=upstream.status_code,
             headers=response_headers,
             media_type=upstream.headers.get("content-type"),
+            background=BackgroundTask(
+                log_request,
+                backend=backend,
+                service_id=service_id,
+                method=method,
+                path=path,
+                status_code=upstream.status_code,
+                elapsed_ms=elapsed_ms,
+                response_body=log_body,
+            ),
         )
 
     async def _stream(
