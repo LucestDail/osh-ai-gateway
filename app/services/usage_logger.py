@@ -20,15 +20,21 @@ def _extract_usage(body: bytes) -> dict[str, Any] | None:
     except (json.JSONDecodeError, UnicodeDecodeError):
         return None
 
+    # Gemini format
     usage = payload.get("usageMetadata")
     if isinstance(usage, dict):
         return usage
-
     for candidate in payload.get("candidates", []) or []:
         if isinstance(candidate, dict):
             nested = candidate.get("usageMetadata")
             if isinstance(nested, dict):
                 return nested
+
+    # OpenAI-compatible format (OpenRouter, etc.)
+    usage = payload.get("usage")
+    if isinstance(usage, dict):
+        return usage
+
     return None
 
 

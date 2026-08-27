@@ -30,7 +30,7 @@ async def lifespan(_: FastAPI):
 
 app = FastAPI(
     title="OSH AI Gateway",
-    description="Transparent passthrough proxy for Gemini AI Studio and Vertex AI",
+    description="LLM Gateway — OpenRouter (DeepSeek/GPT/etc), Gemini, Vertex AI passthrough",
     version="0.1.0",
     lifespan=lifespan,
 )

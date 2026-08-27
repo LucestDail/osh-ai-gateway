@@ -93,9 +93,9 @@ def insert_record(record: dict[str, Any]) -> None:
                 record["path"],
                 int(record["status"]),
                 float(record["elapsed_ms"]),
-                usage.get("promptTokenCount"),
-                usage.get("candidatesTokenCount"),
-                usage.get("totalTokenCount"),
+                usage.get("promptTokenCount") or usage.get("prompt_tokens"),
+                usage.get("candidatesTokenCount") or usage.get("completion_tokens"),
+                usage.get("totalTokenCount") or usage.get("total_tokens"),
             ),
         )
         conn.commit()
