@@ -226,3 +226,60 @@ def test_다른_서비스의_실제_요청은_안_바뀐다(monkeypatch):
     assert resp.status_code == 200
     assert sent.get("body"), "업스트림 본문을 못 잡았다 — 검사 못 함"
     assert "provider" not in sent["body"], "지정 안 한 서비스의 요청이 바뀌었다"
+
+
+# ── 저장 (기록이 실제로 남는가) ────────────────────────────────────────
+
+def test_provider_가_DB_에_실제로_남는다(monkeypatch, tmp_path):
+    """🔴 이게 없어서 D 가 반쪽이었다 (2026-09-21 실측).
+
+    `log_request` 는 record 에 `provider` 를 넣었는데, `insert_record` 는
+    **고정 컬럼 목록**으로 INSERT 하고 표에는 그 컬럼이 아예 없었다.
+    ⇒ 값이 **조용히 버려지고** journald 로그 줄에만 남아 회전하면 사라진다.
+    "기록한다" 를 코드로 확인하지 않으면 **기록됐다고 믿게 된다.**
+    """
+    import sqlite3
+
+    from app.services import usage_store
+
+    db = tmp_path / "usage.db"
+    monkeypatch.setattr(usage_store.settings, "usage_db_path", str(db), raising=False)
+    monkeypatch.setattr(usage_store, "_schema_ready", False, raising=False)
+
+    usage_store.insert_record({
+        "ts": "2026-09-21T00:00:00+00:00", "backend": "openrouter",
+        "service_id": "simpleStock", "method": "POST", "path": "/x",
+        "status": 200, "elapsed_ms": 1.0, "provider": "DeepInfra",
+    })
+
+    conn = sqlite3.connect(db)
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(usage_log)")}
+    assert "provider" in cols, "usage_log 에 provider 컬럼이 없다 — 값이 버려진다"
+    row = conn.execute("SELECT service_id, provider FROM usage_log").fetchone()
+    assert row == ("simpleStock", "DeepInfra"), f"기록이 안 남았다: {row}"
+
+
+def test_기존_DB_에도_컬럼을_붙인다(monkeypatch, tmp_path):
+    """옛 스키마로 만들어진 DB — `CREATE TABLE IF NOT EXISTS` 는 안 고쳐 준다."""
+    import sqlite3
+
+    from app.services import usage_store
+
+    db = tmp_path / "old.db"
+    old = sqlite3.connect(db)
+    old.execute("""CREATE TABLE usage_log (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, ts TEXT NOT NULL, backend TEXT NOT NULL,
+        service_id TEXT NOT NULL, method TEXT NOT NULL, path TEXT NOT NULL,
+        status INTEGER NOT NULL, elapsed_ms REAL NOT NULL,
+        prompt_tokens INTEGER, candidates_tokens INTEGER, total_tokens INTEGER)""")
+    old.commit(); old.close()
+
+    monkeypatch.setattr(usage_store.settings, "usage_db_path", str(db), raising=False)
+    monkeypatch.setattr(usage_store, "_schema_ready", False, raising=False)
+    usage_store.insert_record({
+        "ts": "t", "backend": "openrouter", "service_id": "simpleStock",
+        "method": "POST", "path": "/x", "status": 200, "elapsed_ms": 1.0,
+        "provider": "DeepInfra",
+    })
+    conn = sqlite3.connect(db)
+    assert conn.execute("SELECT provider FROM usage_log").fetchone() == ("DeepInfra",)

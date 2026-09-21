@@ -58,6 +58,15 @@ def ensure_schema(conn: sqlite3.Connection | None = None) -> None:
             )
             """
         )
+        # 🔎 provider — 실제로 서빙한 사업자 (2026-09-21 추가)
+        #
+        # 기존 DB 에는 이 컬럼이 없다. `CREATE TABLE IF NOT EXISTS` 는 **이미 있는 표를
+        # 고치지 않으므로** 여기서 따로 붙인다. 안 붙이면 `insert_record` 가 이 값을
+        # **조용히 버리고**, 기록이 journald 로그 줄에만 남아 회전하면 사라진다
+        # (실측 2026-09-21: 정확히 그 상태였다 — "기록한다" 고 믿었는데 안 남았다).
+        cols = {r[1] for r in db.execute("PRAGMA table_info(usage_log)")}
+        if "provider" not in cols:
+            db.execute("ALTER TABLE usage_log ADD COLUMN provider TEXT")
         db.execute(
             "CREATE INDEX IF NOT EXISTS idx_usage_ts ON usage_log(ts)"
         )
@@ -82,8 +91,8 @@ def insert_record(record: dict[str, Any]) -> None:
             """
             INSERT INTO usage_log (
                 ts, backend, service_id, method, path, status, elapsed_ms,
-                prompt_tokens, candidates_tokens, total_tokens
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                prompt_tokens, candidates_tokens, total_tokens, provider
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 record["ts"],
@@ -96,6 +105,8 @@ def insert_record(record: dict[str, Any]) -> None:
                 usage.get("promptTokenCount") or usage.get("prompt_tokens"),
                 usage.get("candidatesTokenCount") or usage.get("completion_tokens"),
                 usage.get("totalTokenCount") or usage.get("total_tokens"),
+                # 없으면 NULL — ⚠️ "그 회차는 사업자를 모른다" 는 뜻이지 통과가 아니다.
+                record.get("provider"),
             ),
         )
         conn.commit()
