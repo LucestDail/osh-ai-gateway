@@ -41,6 +41,49 @@ def _is_stream_request(path: str, query: str) -> bool:
     return "streamgeneratecontent" in combined or "alt=sse" in combined
 
 
+def _provider_pins() -> dict[str, list[str]]:
+    """설정 문자열 → {service_id: [사업자…]}. 형식이 깨진 항목은 버리고 warn 한다."""
+    pins: dict[str, list[str]] = {}
+    raw = (settings.openrouter_provider_pins or "").strip()
+    for entry in filter(None, (e.strip() for e in raw.split(";"))):
+        svc, _, provs = entry.partition(":")
+        names = [p.strip() for p in provs.split(",") if p.strip()]
+        if not svc.strip() or not names:
+            # 🔴 조용히 넘기지 않는다 — 오타 하나로 고정이 통째로 안 걸리면
+            #    "걸린 줄 알았는데 안 걸린" 상태가 되고 그건 초록불로 보인다.
+            logger.warning(
+                "[provider-pin] 형식이 잘못된 항목을 버린다: %r "
+                "(형식: '서비스ID:사업자[,사업자...]' 를 ';' 로 구분)", entry,
+            )
+            continue
+        pins[svc.strip()] = names
+    return pins
+
+
+def _apply_provider_policy(openai_body: dict, service_id: str) -> None:
+    """지정된 서비스에만 사업자 고정을 붙인다(제자리 수정).
+
+    🔴 이 분기에 **들어가지 않는 서비스는 요청이 한 글자도 안 바뀐다.**
+       그래서 다른 서비스의 회귀를 따로 잴 필요가 없다 — 조건이 구조적으로 가른다.
+
+    ⚠️ `allow_fallbacks=False` 라 **목록 밖으로 나가지 않는다.** 적은 사업자가
+       전부 죽으면 그 서비스만 실패한다. 이것이 "한 곳으로 고정" 의 대가이고
+       사용자가 그 대가를 알고 고른 것이다(2026-09-21).
+    """
+    pins = _provider_pins()
+    order = pins.get(service_id)
+    if not order:
+        return
+    policy: dict[str, object] = {"order": order, "allow_fallbacks": False}
+    if settings.openrouter_provider_deny_training:
+        policy["data_collection"] = "deny"
+    openai_body["provider"] = policy
+    logger.info(
+        "[provider-pin] service_id=%s → order=%s allow_fallbacks=False deny_training=%s",
+        service_id, order, settings.openrouter_provider_deny_training,
+    )
+
+
 def _is_openai_stream_request(body: bytes) -> bool:
     if not body:
         return False
@@ -112,6 +155,7 @@ class ProxyService:
 
         model = settings.openrouter_default_model
         openai_body = gemini_body_to_openai(gemini_body, model, stream=is_stream)
+        _apply_provider_policy(openai_body, service_id)
         openai_bytes = json.dumps(openai_body, ensure_ascii=False).encode()
 
         upstream_url = f"{settings.openrouter_base_url.rstrip('/')}/chat/completions"

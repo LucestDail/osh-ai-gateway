@@ -30,6 +30,19 @@ class Settings(BaseSettings):
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
     openrouter_translate_gemini: bool = False
     openrouter_default_model: str = "deepseek/deepseek-v4-flash"
+    # 🔒 서비스별 사업자(provider) 고정 — 2026-09-21
+    #
+    # 왜: 모델은 고정돼 있어도 OpenRouter 는 **매 호출 임의 사업자**로 라우팅한다
+    #     (실측: 이 모델을 서비스하는 사업자 15곳). 민감 데이터를 보내는 서비스는
+    #     "어디로 갔는지 사후에 알 수 없다" 가 된다.
+    # 범위: **여기 적힌 service_id 에만** 적용한다. 다른 서비스는 분기에 들어가지도
+    #     않으므로 라우팅이 그대로다(= "공용은 건드리지 않는다" 는 사용자 결정).
+    # 형식: "서비스ID:사업자[,사업자...]" 를 `;` 로 구분. 비우면 아무 데도 적용 안 함.
+    #     ⚠️ allow_fallbacks=false 와 함께 나가므로 **목록 밖으로는 안 나간다** —
+    #        적은 사업자가 전부 죽으면 그 서비스의 LLM 호출은 실패한다(의도된 대가).
+    openrouter_provider_pins: str = "simpleStock:deepinfra"
+    # 학습 사용 거부. 고정 대상 서비스에만 함께 나간다.
+    openrouter_provider_deny_training: bool = True
     openrouter_price_per_m_in_usd: float = 0.09
     openrouter_price_per_m_out_usd: float = 0.18
 
