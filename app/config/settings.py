@@ -40,7 +40,17 @@ class Settings(BaseSettings):
     # 형식: "서비스ID:사업자[,사업자...]" 를 `;` 로 구분. 비우면 아무 데도 적용 안 함.
     #     ⚠️ allow_fallbacks=false 와 함께 나가므로 **목록 밖으로는 안 나간다** —
     #        적은 사업자가 전부 죽으면 그 서비스의 LLM 호출은 실패한다(의도된 대가).
-    openrouter_provider_pins: str = "simpleStock:deepinfra"
+    #
+    # 🔴 왜 한 곳이 아니라 세 곳인가 (2026-09-21 실측으로 바뀐 값)
+    #   처음에 `simpleStock:deepinfra` 한 곳으로 걸었더니 **5회 중 3회 429**
+    #   (성공률 40%). 같은 시각 고정 없는 대조군은 3/3 성공이었다.
+    #   ⇒ "한 곳" 은 추적성은 최고지만 **이 워크로드에서 안 버틴다.**
+    #   실측에서 실제로 응답한 세 곳으로 넓혔다. 데이터가 가는 곳은 15곳 → **3곳**으로
+    #   바운드되고, 어느 회차가 어디로 갔는지는 usage_log.provider 가 알려준다.
+    # ⚠️ 슬러그는 **공식 providers 목록과 모델 endpoints 의 tag 로 교차 확인**했다.
+    #   `openinference` 가 아니라 **`open-inference`** 다 — 이름만 보고 적었으면
+    #   allow_fallbacks=false 와 맞물려 **전부 실패**했을 자리다.
+    openrouter_provider_pins: str = "simpleStock:open-inference,venice,deepinfra"
     # 학습 사용 거부. 고정 대상 서비스에만 함께 나간다.
     openrouter_provider_deny_training: bool = True
     openrouter_price_per_m_in_usd: float = 0.09
