@@ -210,8 +210,34 @@ class ProxyService:
 
             elapsed_ms = (time.perf_counter() - started) * 1000
 
+            # 🔎 실제로 답한 모델·사업자를 **응답 헤더**로 알려 준다 (2026-09-21)
+            #
+            # 왜: 호출하는 쪽은 자기가 **요청한** 모델 이름밖에 모른다. 게이트웨이가
+            #     `openrouter_default_model` 로 갈아끼우고 OpenRouter 가 다시 사업자를
+            #     고르므로, 화면에 "gemini-3.5-flash" 를 띄우면 **거짓말이 된다**
+            #     (실측: simpleStock 이 그 상태였고 마지막 gemini 호출은 2026-06-24 였다).
+            # 왜 헤더인가: 본문 스키마를 안 건드려 **다른 서비스에 영향이 0** 이다.
+            #     모르는 헤더는 무시되므로 읽지 않는 쪽은 아무 일도 일어나지 않는다.
+            extra_headers: dict[str, str] = {}
             if upstream.status_code == 200:
                 openai_resp = json.loads(upstream.content)
+                # ⚠️ 응답이 말해 주는 값을 쓴다 — 우리가 **요청한** 값이 아니다.
+                #    둘이 다를 수 있고, 다를 때가 바로 알고 싶은 순간이다.
+                # 🔴 HTTP 헤더 값은 **latin-1 만** 담을 수 있다. 업스트림이 비-latin
+                #    문자가 든 모델명을 주면 헤더를 만드는 순간 **응답 전체가 깨진다**
+                #    (내 테스트가 이걸 먼저 잡았다 — UnicodeEncodeError).
+                #    ⇒ 담을 수 없으면 **그 헤더만 조용히 뺀다.** 부가 정보 하나 때문에
+                #       본 응답을 잃는 것이 훨씬 나쁘다.
+                for key, val in (("X-Llm-Model", openai_resp.get("model")),
+                                 ("X-Llm-Provider", openai_resp.get("provider"))):
+                    if not isinstance(val, str) or not val:
+                        continue
+                    try:
+                        val.encode("latin-1")
+                    except UnicodeEncodeError:
+                        logger.warning("[llm-header] %s 를 헤더에 담을 수 없다(비-latin): %r", key, val[:40])
+                        continue
+                    extra_headers[key] = val
                 gemini_resp = openai_response_to_gemini(openai_resp)
                 content = json.dumps(gemini_resp, ensure_ascii=False).encode()
                 log_body = upstream.content
@@ -222,6 +248,7 @@ class ProxyService:
             return Response(
                 content=content, status_code=upstream.status_code,
                 media_type="application/json",
+                headers=extra_headers or None,
                 background=BackgroundTask(
                     log_request,
                     backend="openrouter", service_id=service_id, method="POST",

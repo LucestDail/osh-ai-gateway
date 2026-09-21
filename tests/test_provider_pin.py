@@ -283,3 +283,98 @@ def test_기존_DB_에도_컬럼을_붙인다(monkeypatch, tmp_path):
     })
     conn = sqlite3.connect(db)
     assert conn.execute("SELECT provider FROM usage_log").fetchone() == ("DeepInfra",)
+
+
+# ── 실제 모델·사업자를 응답 헤더로 ─────────────────────────────────────
+
+def _drive(monkeypatch, upstream_json: dict, svc: str = "simpleStock"):
+    """요청을 실제로 태우고 (응답, 업스트림으로 나간 본문) 을 돌려준다."""
+    import httpx
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+    from app.services.proxy import proxy_service
+    import app.services.proxy as proxy_mod
+
+    monkeypatch.setattr(settings, "openrouter_translate_gemini", True, raising=False)
+    monkeypatch.setattr(settings, "openrouter_api_key", "test-key", raising=False)
+    monkeypatch.setattr(proxy_mod, "log_request", lambda **kw: None)
+
+    sent: dict = {}
+
+    async def fake_request(method, url, **kw):
+        sent["body"] = json.loads(kw.get("content") or b"{}")
+        return httpx.Response(200, json=upstream_json, request=httpx.Request(method, url))
+
+    monkeypatch.setattr(proxy_service._client, "request", fake_request)
+    with TestClient(app) as client:
+        resp = client.post(
+            "/gemini/v1beta/models/gemini-2.5-flash-lite:generateContent",
+            json={"contents": [{"parts": [{"text": "hi"}]}]},
+            headers={"x-service-id": svc},
+        )
+    return resp, sent
+
+
+def test_실제_모델과_사업자를_헤더로_알려_준다(monkeypatch):
+    """🔴 호출하는 쪽은 자기가 **요청한** 모델 이름밖에 모른다.
+
+    게이트웨이가 모델을 갈아끼우고 OpenRouter 가 다시 사업자를 고르므로,
+    화면에 요청한 이름을 띄우면 **거짓말이 된다**(실측: simpleStock 이 그 상태였다).
+    """
+    _pins(monkeypatch, "simpleStock:open-inference")
+    resp, _ = _drive(monkeypatch, {
+        "model": "deepseek/deepseek-v4-flash",
+        "provider": "OpenInference",
+        "choices": [{"message": {"role": "assistant", "content": "ok"}}],
+    })
+    assert resp.status_code == 200
+    assert resp.headers.get("x-llm-model") == "deepseek/deepseek-v4-flash"
+    assert resp.headers.get("x-llm-provider") == "OpenInference"
+
+
+def test_응답이_말_안_하면_헤더를_지어내지_않는다(monkeypatch):
+    """⚠️ 모르는 것을 채우면 **틀린 값을 확신 있게 보여주게** 된다.
+
+    헤더가 없으면 "모른다" 이고, 그건 요청한 이름을 띄우는 것보다 정직하다.
+    """
+    _pins(monkeypatch, "")
+    resp, _ = _drive(monkeypatch, {
+        "choices": [{"message": {"role": "assistant", "content": "ok"}}],
+    })
+    assert resp.status_code == 200
+    assert "x-llm-model" not in {k.lower() for k in resp.headers}
+    assert "x-llm-provider" not in {k.lower() for k in resp.headers}
+
+
+def test_요청한_모델이_아니라_응답이_말한_모델이다(monkeypatch):
+    """★ 이 테스트가 이 기능의 존재 이유다 — 둘이 다를 때가 알고 싶은 순간이다."""
+    _pins(monkeypatch, "")
+    monkeypatch.setattr(settings, "openrouter_default_model", "requested/model", raising=False)
+    resp, sent = _drive(monkeypatch, {
+        "model": "actually/answered-model",
+        "choices": [{"message": {"role": "assistant", "content": "ok"}}],
+    })
+    assert sent["body"]["model"] == "requested/model", "업스트림에는 요청 모델이 나가야 한다"
+    assert resp.headers.get("x-llm-model") == "actually/answered-model", \
+        "헤더가 요청 모델을 되풀이한다 — 그러면 이 기능은 아무것도 안 알려 준다"
+
+
+def test_헤더에_못_담는_모델명이면_응답을_잃지_않는다(monkeypatch):
+    """🔴 내 테스트가 먼저 잡은 진짜 결함.
+
+    HTTP 헤더 값은 **latin-1 만** 담을 수 있다. 업스트림이 비-latin 문자가 든
+    모델명을 주면 헤더를 만드는 순간 **응답 전체가 깨진다**(UnicodeEncodeError).
+    ⇒ 담을 수 없으면 그 헤더만 뺀다. **부가 정보 하나 때문에 본 응답을 잃지 않는다.**
+    """
+    _pins(monkeypatch, "")
+    resp, _ = _drive(monkeypatch, {
+        "model": "모델이름한글",
+        "provider": "OpenInference",
+        "choices": [{"message": {"role": "assistant", "content": "ok"}}],
+    })
+    assert resp.status_code == 200, "헤더 하나 때문에 응답이 깨졌다"
+    assert resp.json()["candidates"][0]["content"]["parts"][0]["text"] == "ok"
+    assert "x-llm-model" not in {k.lower() for k in resp.headers}
+    # 담을 수 있는 쪽은 그대로 나간다 — 하나가 막혔다고 전부 버리지 않는다
+    assert resp.headers.get("x-llm-provider") == "OpenInference"
