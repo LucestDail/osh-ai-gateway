@@ -62,10 +62,171 @@ def gemini_body_to_openai(gemini_body: dict, model: str, stream: bool = False) -
         openai_body["stop"] = gen_config["stopSequences"]
 
     # JSON 구조화 출력: responseMimeType=application/json → response_format
+    #
+    # 🔴 **스키마를 번역한다** — 2026-10-01 (pm2)
+    #
+    # 왜: 종전엔 `responseMimeType` 만 보고 `{"type":"json_object"}` 를 보냈다.
+    #     그건 **"JSON 이기만 하면 된다"** 라서 필드·enum·required 를 하나도 강제하지
+    #     않는다. 호출자(simpleStock·HARU·…)는 매 호출 `responseSchema` 를 성실히
+    #     만들어 보내는데 **우리가 그것을 통째로 버리고 있었다.**
+    #     ⇒ 선언된 계약이 한 번도 집행된 적이 없는 상태 — "수집해 놓고 안 쓰는" 의
+    #        가장 비싼 형태다(보내는 쪽은 보호받는 줄 안다).
+    #
+    # 실측(2026-10-01, 라이브 게이트웨이 · provider=OpenInference · 각 N=3):
+    #     A) json_object  → positions 2건 중 `stance` 적중 **0/4** (+ 1회 파싱 실패)
+    #     B) json_schema  → **6/6**
+    #     같은 프롬프트·같은 모델이고, A 에는 system 프롬프트에 출력 모양까지 적어 줬다.
+    #     simpleStock 라이브는 이 때문에 4회차 중 2회차에서 종목 판단이 통째로 증발했다.
+    #
+    # ⚠️ 변환에 실패하면 **예전 동작(json_object)으로 떨어진다.** 스키마를 못 읽는 것이
+    #    요청을 깨뜨리는 것보다 낫다 — 이 함수는 7개 서비스가 공용으로 탄다.
+    #
+    # ⚠️ **스트리밍에는 안 건다.** 스키마는 "다 받고 나서 파싱하는" 호출을 위한 것이고,
+    #    스트리밍 경로에는 아래 호출부의 **1회 폴백 재시도가 없다**(SSE 는 이미
+    #    내려가기 시작한 뒤라 되돌릴 수 없다). 되돌릴 수 없는 자리에 새 실패 모드를
+    #    만들지 않는다. 실측상 구조화 출력 호출은 전부 비스트리밍이다.
     if gen_config.get("responseMimeType") == "application/json":
-        openai_body["response_format"] = {"type": "json_object"}
+        converted = None if stream else gemini_schema_to_json_schema(gen_config.get("responseSchema"))
+        if converted is None:
+            openai_body["response_format"] = {"type": "json_object"}
+        else:
+            openai_body["response_format"] = {
+                "type": "json_schema",
+                "json_schema": {"name": "response", "strict": True, "schema": converted},
+            }
 
     return openai_body
+
+
+# ── Gemini Schema → OpenAI(JSON Schema) 역변환 ────────────────────────────────
+#
+# 호출자는 `@google/genai` 의 `Type.*` 로 만든 **대문자 타입**을 보낸다
+# (`{"type":"OBJECT","properties":{…},"required":[…]}`). OpenAI 계열은 소문자
+# JSON Schema 를 받는다. 그 사이를 여기서 잇는다.
+#
+# 🔴 **strict 모드의 제약을 우리가 흡수한다** — OpenAI 호환 strict 는
+#    ①모든 object 에 `additionalProperties:false` ②`required` 에 **모든** 프로퍼티
+#    를 요구한다. 그런데 원래 스키마에서 **선택이었던 필드를 강제하면 모델이
+#    없는 값을 지어낸다**(이 워크스페이스가 반복해 밟은 함정이다).
+#    ⇒ 선택 필드는 **`null` 을 허용**해서 required 에 넣는다. 그러면 계약은
+#      "그 칸을 비워 두지 말고 **모른다고 말하라**" 가 되고, 모양은 강제되면서
+#      지어내기는 강제되지 않는다. (OpenAI 가 권장하는 그 패턴이다.)
+_GEMINI_TYPES = {
+    "STRING": "string",
+    "NUMBER": "number",
+    "INTEGER": "integer",
+    "BOOLEAN": "boolean",
+    "ARRAY": "array",
+    "OBJECT": "object",
+}
+
+# OpenAI 구조화 출력의 공개 한도. 넘으면 업스트림이 400 을 내므로 **우리가 먼저 포기**한다
+# (포기 = json_object 폴백이라 호출은 산다).
+_MAX_DEPTH = 5
+_MAX_PROPERTIES = 100
+
+
+def gemini_schema_to_json_schema(node: Any) -> dict | None:
+    """Gemini Schema 를 OpenAI strict JSON Schema 로 바꾼다. 못 바꾸면 ``None``.
+
+    ``None`` 은 실패가 아니라 **"예전 동작으로 가라"** 는 신호다 — 호출부가
+    `json_object` 로 떨어뜨린다.
+    """
+    counter = {"properties": 0}
+    try:
+        converted = _convert(node, depth=0, counter=counter)
+    except _SchemaTooBig:
+        return None
+    if not isinstance(converted, dict) or converted.get("type") != "object":
+        # 최상위가 object 가 아니면 strict 모드를 쓸 수 없다(스펙 제약).
+        return None
+    return converted
+
+
+class _SchemaTooBig(Exception):
+    """한도를 넘었다 — 변환을 포기하고 예전 동작으로 떨어진다."""
+
+
+def _convert(node: Any, *, depth: int, counter: dict) -> dict | None:
+    if not isinstance(node, dict):
+        return None
+    if depth > _MAX_DEPTH:
+        raise _SchemaTooBig()
+
+    raw_type = node.get("type")
+    # 호출자가 소문자로 보낼 수도 있다(직접 JSON Schema 를 쓰는 서비스) — 둘 다 받는다.
+    json_type = _GEMINI_TYPES.get(str(raw_type).upper()) if raw_type is not None else None
+    if json_type is None:
+        return None
+
+    out: dict[str, Any] = {"type": json_type}
+    if isinstance(node.get("description"), str) and node["description"]:
+        out["description"] = node["description"]
+
+    if json_type == "object":
+        props_in = node.get("properties")
+        if not isinstance(props_in, dict) or not props_in:
+            # strict 모드는 프로퍼티 없는 object 를 허용하지 않는다.
+            return None
+        originally_required = node.get("required")
+        required_set = set(originally_required) if isinstance(originally_required, list) else set()
+
+        props_out: dict[str, Any] = {}
+        for key, value in props_in.items():
+            child = _convert(value, depth=depth + 1, counter=counter)
+            if child is None:
+                # 한 칸이라도 못 읽으면 **스키마 전체를 포기**한다. 반쪽 스키마를
+                # strict 로 보내면 멀쩡한 필드를 거부당한다 — 조용한 손실이 된다.
+                return None
+            counter["properties"] += 1
+            if counter["properties"] > _MAX_PROPERTIES:
+                raise _SchemaTooBig()
+            # 원래 선택이었던 칸은 null 을 허용한다(위 주석 참조).
+            #
+            # 🔴 `nullable` 은 **그 칸 자신**(`value`)에서 읽는다. 처음에 `node`(= 부모
+            #    object)에서 읽었는데, 그러면 ①자식에 달린 `nullable` 이 무시되고
+            #    ②부모에 달면 **자식 전부가** null 허용이 되는 **양방향으로 틀린** 동작이
+            #    된다(검증자가 두 방향을 다 실측해 잡았다).
+            #
+            # ⚠️ **array 는 null 로 만들지 않는다** — "없음" 은 빈 배열로 말할 수 있으므로
+            #    null 이 필요 없고, `["array","null"]` 은 strict 구현이 제공자마다 갈린다.
+            #    object 는 빈 값을 표현할 방법이 없어 null 유니온을 유지한다(거부당하면
+            #    호출부의 1회 폴백이 받는다 — 그래서 그 폴백을 먼저 만들었다).
+            optional = key not in required_set or value.get("nullable") is True
+            if optional and child.get("type") != "array":
+                child = _allow_null(child)
+            props_out[key] = child
+
+        out["properties"] = props_out
+        out["required"] = list(props_out)          # strict: 전부 required
+        out["additionalProperties"] = False
+        return out
+
+    if json_type == "array":
+        items = _convert(node.get("items"), depth=depth + 1, counter=counter)
+        if items is None:
+            return None
+        out["items"] = items
+        return out
+
+    enum = node.get("enum")
+    if isinstance(enum, list) and enum:
+        out["enum"] = list(enum)
+    return out
+
+
+def _allow_null(schema: dict) -> dict:
+    """그 칸에 ``null`` 을 허용한다 — "모른다" 를 말할 수 있게."""
+    out = dict(schema)
+    t = out.get("type")
+    if isinstance(t, str):
+        out["type"] = [t, "null"]
+    elif isinstance(t, list) and "null" not in t:
+        out["type"] = [*t, "null"]
+    # enum 이 있으면 null 도 목록에 넣어야 한다(안 넣으면 모델이 null 을 못 쓴다).
+    if isinstance(out.get("enum"), list) and None not in out["enum"]:
+        out["enum"] = [*out["enum"], None]
+    return out
 
 
 def openai_response_to_gemini(openai_resp: dict) -> dict:

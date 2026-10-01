@@ -84,6 +84,53 @@ def _apply_provider_policy(openai_body: dict, service_id: str) -> None:
     )
 
 
+def _uses_json_schema(openai_body: dict) -> bool:
+    rf = openai_body.get("response_format")
+    return isinstance(rf, dict) and rf.get("type") == "json_schema"
+
+
+def _apply_structured_output_routing(openai_body: dict) -> None:
+    """json_schema 를 보낼 때는 **그걸 지원하는 사업자로만** 간다 (2026-10-01, pm2).
+
+    🔴 왜 필요한가: 이 모델을 서비스하는 사업자 15곳 중 **5곳이
+       `structured_outputs` 를 지원하지 않는다**(실측: Relace·GMICloud·
+       SiliconFlow·Novita·Azure). OpenRouter 는 매 호출 임의 사업자로 라우팅하므로,
+       스키마를 그냥 보내면 **어느 날 갑자기** 지원 안 하는 곳에 걸려 400 이 난다.
+       `require_parameters` 가 그 목록을 알아서 걸러 준다.
+
+    ⚠️ 사업자 고정이 이미 있는 서비스(simpleStock)에는 **덧붙이기만** 한다 —
+       `order`/`allow_fallbacks` 를 건드리지 않는다. 그 셋(open-inference·venice·
+       deepinfra)은 전부 지원하므로 실제로 좁혀지지도 않는다(실측).
+    """
+    if not _uses_json_schema(openai_body):
+        return
+    policy = openai_body.get("provider")
+    if not isinstance(policy, dict):
+        policy = {}
+    policy["require_parameters"] = True
+    openai_body["provider"] = policy
+
+
+def _downgrade_to_json_object(openai_body: dict) -> bool:
+    """json_schema 를 예전 동작(json_object)으로 되돌린다. 바꿨으면 True.
+
+    ⚠️ **이 폴백이 있어야 스키마 집행을 켤 수 있다.** 7개 서비스가 이 번역기를
+       공용으로 타는데, 그중 하나의 스키마가 업스트림에서 거부되면 그 서비스는
+       **통째로 죽는다.** 한 번 더 부르는 비용으로 그 위험을 0 으로 만든다.
+    ⚠️ 조용히 떨어뜨리지 않는다 — 떨어졌다는 건 "누군가의 스키마가 집행 불가" 라는
+       뜻이고, 그건 로그에 남아야 고쳐진다.
+    """
+    if not _uses_json_schema(openai_body):
+        return False
+    openai_body["response_format"] = {"type": "json_object"}
+    policy = openai_body.get("provider")
+    if isinstance(policy, dict):
+        policy.pop("require_parameters", None)
+        if not policy:
+            openai_body.pop("provider", None)
+    return True
+
+
 def _is_openai_stream_request(body: bytes) -> bool:
     if not body:
         return False
@@ -156,6 +203,7 @@ class ProxyService:
         model = settings.openrouter_default_model
         openai_body = gemini_body_to_openai(gemini_body, model, stream=is_stream)
         _apply_provider_policy(openai_body, service_id)
+        _apply_structured_output_routing(openai_body)
         openai_bytes = json.dumps(openai_body, ensure_ascii=False).encode()
 
         upstream_url = f"{settings.openrouter_base_url.rstrip('/')}/chat/completions"
@@ -207,6 +255,30 @@ class ProxyService:
                 raise HTTPException(status_code=504, detail="Upstream timeout") from exc
             except httpx.HTTPError as exc:
                 raise HTTPException(status_code=502, detail=f"Upstream error: {exc}") from exc
+
+            # 🔴 스키마 집행이 거부되면 **한 번만** 예전 동작으로 되돌려 다시 부른다.
+            #
+            # ⚠️ **400/422 만** 재시도한다. 처음엔 4xx 전체로 썼는데 그러면
+            #    **429(쿼터 초과)에 백오프 없이 즉시 한 번 더 때린다** — 모자란 쿼터를
+            #    더 태우는 쪽이다(검증자 지적). 401·403·413 도 스키마 탓이 아니다.
+            #    5xx·타임아웃도 스키마 탓이 아니므로 제외한다.
+            if upstream.status_code in (400, 422) and _downgrade_to_json_object(openai_body):
+                logger.warning(
+                    "[json-schema] 업스트림이 %s 로 거부 — json_object 로 1회 재시도한다 "
+                    "(service_id=%s, body=%s)",
+                    upstream.status_code, service_id or "(없음)",
+                    upstream.text[:300].replace("\n", " "),
+                )
+                try:
+                    upstream = await self._client.request(
+                        "POST", upstream_url, headers=headers,
+                        content=json.dumps(openai_body, ensure_ascii=False).encode(),
+                        timeout=settings.proxy_timeout_seconds,
+                    )
+                except httpx.TimeoutException as exc:
+                    raise HTTPException(status_code=504, detail="Upstream timeout") from exc
+                except httpx.HTTPError as exc:
+                    raise HTTPException(status_code=502, detail=f"Upstream error: {exc}") from exc
 
             elapsed_ms = (time.perf_counter() - started) * 1000
 
